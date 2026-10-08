@@ -15,7 +15,16 @@ async function getHandler(
       return NextResponse.json({ success: false, error: "Pehle login karein." }, { status: 401 });
     }
 
+    if (current.user.role !== Role.TRAINER && current.user.role !== Role.OWNER) {
+      return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 403 });
+    }
+
     const { id } = await params;
+    if (current.user.role === Role.TRAINER && !await prisma.trainerAssignment.findFirst({
+      where: { gymMemberId: id, trainerId: current.user.id, ...effectiveTrainerAssignment() },
+    })) {
+      return NextResponse.json({ success: false, error: "Aap is member ke assigned trainer nahi hain." }, { status: 403 });
+    }
     const plans = await prisma.workoutPlan.findMany({
       where: { gymMemberId: id },
       include: {

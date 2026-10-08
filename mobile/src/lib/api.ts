@@ -17,6 +17,7 @@ export async function request<T>(path: string, options: { token?: string | null;
     return data as T;
   } catch (error) {
     if (error instanceof ApiError || options.signal?.aborted) throw error;
+    if (__DEV__) console.warn('GYM_REQUEST_FAILED', path, error instanceof Error ? error.message : 'Network failure');
     throw new ApiError(controller.signal.aborted ? 'The server took too long. Please try again.' : 'Cannot connect. Check your internet connection and try again.', 0);
   } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); }
 }

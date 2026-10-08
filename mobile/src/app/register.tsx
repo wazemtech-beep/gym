@@ -1,9 +1,10 @@
 import { Link } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Image, Platform, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Button, Card, ErrorNotice, Field, Heading, Screen, styles } from '../components/ui';
 import { request } from '../lib/api';
+import { appendPhoto } from '../lib/assets';
 
 const initial = { fullName: '', email: '', phone: '', password: '', confirmPassword: '', address: '', emergencyContactName: '', emergencyContactPhone: '', fitnessGoal: '', limitations: '', dateOfBirth: '', joiningDate: '' };
 export default function Register() {
@@ -32,10 +33,7 @@ export default function Register() {
       let body: unknown = form;
       if (photo) {
         const data = new FormData(); Object.entries(form).forEach(([name, value]) => data.append(name, value));
-        const type = photo.mimeType || 'image/jpeg';
-        const name = `profile.${type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg'}`;
-        if (Platform.OS === 'web') data.append('photo', await (await fetch(photo.uri)).blob(), name);
-        else data.append('photo', { uri: photo.uri, name, type } as unknown as Blob);
+        await appendPhoto(data, 'photo', photo);
         body = data;
       }
       await request('/api/member-registration', { method: 'POST', body });

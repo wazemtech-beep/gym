@@ -26,23 +26,22 @@ Firebase **client** files `google-services.json` and `GoogleService-Info.plist` 
 
 ## Verification evidence and current limitations
 
-Historical 7 October run: 100 targeted API/auth/financial/worker/provider checks and production build passed. One authorized forgot-password email reached the user's inbox. This is historical evidence, not exhaustive certification.
+Historical 7 October run: 100 targeted API/auth/financial/worker/provider checks and a production build passed. One authorized forgot-password email reached the user's inbox. This is historical evidence, not exhaustive certification.
 
-8 October current pass:
-- Web TypeScript and production build passed: 123 generated routes/pages.
-- Mobile TypeScript passed and Android JavaScript/Hermes export passed.
-- Mobile lint initially had 0 errors and 4 hook dependency warnings. Dependencies were corrected; rerun lint after these edits.
-- Database schema audit found no missing columns across 56 models; SMTP authentication passed without sending mail.
-- Admin/member isolated API suite: 42 passed, 0 failed; fixtures cleaned up.
-- Financial integrity suite: 11 passed, 0 failed; all database fixture changes rolled back.
-- Mobile authentication suite detected that current web login responses exposed a bearer token. Source was fixed to expose a token only for legacy no-portal callers or a member mobile client. Rebuild/restart backend and rerun `verify-mobile-auth.cjs` before counting it as passed.
-- Source inspection found trainer progress feedback POST lacked active assignment/measurement-consent checks. The guard was added. Add/run explicit assigned/unassigned/revoked-consent tests and rebuild afterward.
-- An authorized Vivo V2331 / Android API 35 phone was connected by ADB. Existing gym development app launched. Native Gradle build was still running when repository handoff was requested. Do not count native APK compile/install, fresh device login, offline recovery, photo picker, PDF sharing, push receipt or Health Connect reads as passed yet.
+8 October targeted checks:
+- Web TypeScript and production build passed after the trainer plan access guard; production output generated 123 routes/pages.
+- Mobile TypeScript and lint passed after the phone-photo upload and loading-layout fixes. Final Android Hermes export also passed after the Expo 57 upload adapter change (1,581 modules).
+- Runtime schema audit found no missing columns across 56 models; SMTP authentication passed without sending mail.
+- Isolated suites passed: admin/member API 42, finance 11, mobile auth 10, cache/outbox/templates 12, trainer plans 21, account flows 14, worker lifecycle 11, providers 6. Total: 127 targeted checks, 0 final failures. Fixtures were cleaned up. These checks cover defined contracts and are not exhaustive certification.
+- Native Android debug APK compiled, installed on Vivo V2331 / Android API 35, and loaded the current app through Metro over ADB. A fresh synthetic member login succeeded.
+- Physical-device flows confirmed: member dashboard and active membership load; assigned workout details render; an offline workout completion queued and synchronized once after reconnect (database stored one 12-minute, 8-rep session); address/emergency contacts saved; diet-change request saved; goal 77 kg saved; synthetic meal log saved; synthetic progress photo uploaded through the Expo 57 `File` multipart adapter and then removed through the app; password change succeeded and new password sign-in worked; logout-all-devices showed confirmation and returned to sign-in; regular logout/re-login worked. Synthetic member fixture and test photo were removed afterward.
+- Payments, attendance, updates and privacy pages opened on the phone. Payments had no fixture invoice/receipt, so receipt download/share remains unverified.
+- Health Connect native permission screen opened and permissions were granted; the phone reported all four read categories. Cloud-storage consent remained off, so no health data was uploaded or read from a real health source. The test did not verify selecting only a subset of permissions.
 
-Useful existing scripts: `web/scripts/verify-api.cjs`, `verify-mobile-auth.cjs`, `verify-account-flows.cjs`, `verify-financial.ts`, `verify-support.ts`, `verify-worker.ts`, `verify-providers.ts`, `verify-runtime.cjs`. Review each before running. API scripts use `GYM_VERIFY_URL` (set explicitly; defaults vary). Do not use old broad `test-*.ts` scripts blindly: some mutate unrelated demo records or broadcast messages. Do not set `GYM_VERIFY_EMAIL` unless actual email delivery is specifically authorized for that run.
+Useful scripts include `web/scripts/verify-api.cjs`, `verify-mobile-auth.cjs`, `verify-account-flows.cjs`, `verify-financial.ts`, `verify-support.ts`, `verify-worker.ts`, `verify-providers.ts`, `verify-runtime.cjs`, `verify-trainer.cjs`, and `verify-device-fixture.cjs`. Review before running. API scripts use `GYM_VERIFY_URL` (set explicitly; defaults vary). Do not use old broad `test-*.ts` scripts blindly: some mutate unrelated demo records or broadcast messages. Do not set `GYM_VERIFY_EMAIL` unless actual email delivery is specifically authorized for that run.
 
-## Next steps
+## Remaining work
 
-Finish the current verification: rebuild after auth/trainer fixes; rerun mobile auth; add trainer draft/publish/feedback, foreign-member denial and sharing-revocation checks; exercise member feature writes and cache refresh; complete Android APK build/install and test on the phone. Fix failures and rerun affected checks. Report Passed, Failed, and Not Tested separately, with concrete evidence. Trainer mobile is a separate implementation task, not a test failure. iOS cannot be device-tested from the current Windows/Android setup.
+The mobile app is a member app; trainer mobile screens are not implemented. Native push receipt requires Firebase client configuration. PDF receipt sharing needs an invoice fixture/device pass. iOS cannot be device-tested from the current Windows/Android setup. Email-change verification has backend contract coverage and the form was opened on device, but an end-to-end email change was not exercised. Admin/trainer web features have targeted API/build coverage rather than exhaustive browser verification.
 
-For production, run the worker persistently, configure real HTTPS/providers/signing, validate private asset migration and shared cache revisions for multiple hosts. Never say every item is final solely because TypeScript/build passes.
+Production still needs a persistent worker, HTTPS host, provider/client configuration, signing, store accounts, policy URLs and deployment validation. Never claim every item is final solely because builds and targeted checks pass.

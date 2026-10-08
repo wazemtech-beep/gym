@@ -1,5 +1,6 @@
 import { Platform, type ImageURISource } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { API_URL, ApiError, request } from './api';
@@ -11,11 +12,14 @@ export async function choosePhoto() {
   if ((image.fileSize || 0) > 10 * 1024 * 1024) throw new Error('Choose an image smaller than 10 MB.');
   return image;
 }
+export async function appendPhoto(form: FormData, field: string, image: ImagePicker.ImagePickerAsset) {
+  if (Platform.OS === 'web') form.append(field, await (await fetch(image.uri)).blob(), image.fileName || 'photo.jpg');
+  else form.append(field, new File(image.uri));
+}
 export async function uploadPhoto(image: ImagePicker.ImagePickerAsset, folder: 'progress' | 'transfers', token: string | null) {
-  const form = new FormData(), type = image.mimeType || 'image/jpeg';
+  const form = new FormData();
   form.append('folder', folder);
-  if (Platform.OS === 'web') form.append('file', await (await fetch(image.uri)).blob(), 'photo.jpg');
-  else form.append('file', { uri: image.uri, name: image.fileName || 'photo.jpg', type } as unknown as Blob);
+  await appendPhoto(form, 'file', image);
   return (await request<{ data: { url: string; publicId: string } }>('/api/v1/uploads/cloudinary', { token, method: 'POST', body: form })).data;
 }
 export function privateImage(url: string, token: string | null): ImageURISource {

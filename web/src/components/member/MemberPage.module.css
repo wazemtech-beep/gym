@@ -1,0 +1,12 @@
+.page { min-width: 0; }
+.heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.heading h1 { font-size: clamp(1.9rem, 3vw, 2.45rem); font-weight: 600; line-height: 1.15; letter-spacing: -.02em; margin: 0; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.content { min-width: 0; }
+.sectionNav { display: flex; flex-wrap: wrap; gap: 6px; padding: 5px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); margin-bottom: 24px; width: fit-content; max-width: 100%; }
+.sectionNav button { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: .85rem; font-weight: 500; }
+.sectionNav button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-primary); font-weight: 600; }
+.sectionNav button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.tabPanel { min-width: 0; }
+.tabPanel[hidden] { display: none; }
+@media (max-width: 600px) { .sectionNav { width: 100%; } .sectionNav button { flex: 1; justify-content: center; padding: 10px 8px; font-size: .78rem; } }

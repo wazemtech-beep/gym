@@ -1,0 +1,11 @@
+.sections { display: grid; gap: 22px; }
+.panel { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 24px; box-shadow: 0 4px 18px rgb(25 44 32 / 3%); min-width: 0; }
+.panel h2 { font-size: 1.35rem; margin: 0 0 20px; }
+.row { display: flex; align-items: center; gap: 16px; padding: 20px 0; border-top: 1px solid var(--border-subtle); }
+.row:last-child { padding-bottom: 0; }
+.icon { width: 42px; height: 42px; display: grid; place-items: center; flex-shrink: 0; border-radius: 12px; background: var(--accent-soft); color: var(--accent-primary); }
+.description { flex: 1; min-width: 0; }
+.description h3 { font-size: 1.02rem; margin: 0 0 5px; }
+.description p { font-size: .83rem; color: var(--text-muted); margin: 0; overflow-wrap: anywhere; }
+.row > button, .row > a { flex-shrink: 0; }
+@media (max-width: 600px) { .panel { padding: 18px; } .row { flex-wrap: wrap; gap: 12px; } .description { flex-basis: calc(100% - 60px); } .row > button, .row > a { margin-left: 54px; max-width: calc(100% - 54px); white-space: normal; } }

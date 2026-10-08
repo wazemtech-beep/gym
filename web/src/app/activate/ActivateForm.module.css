@@ -1,0 +1,16 @@
+.card { width: 100%; min-width: 0; }
+.intro { margin-bottom: 24px; }
+.form { display: grid; gap: 20px; }
+.field { display: grid; gap: 8px; min-width: 0; }
+.label { display: flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 500; color: var(--text-main); }
+.input { width: 100%; min-width: 0; min-height: 46px; box-sizing: border-box; }
+.code { letter-spacing: .15em; font-variant-numeric: tabular-nums; }
+.hint { margin: 0; color: var(--text-secondary); font-size: .78rem; }
+.strength { display: grid; gap: 6px; }
+.bars { display: flex; gap: 4px; }
+.bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border-subtle); }
+.strengthLabel { font-size: .76rem; color: var(--text-secondary); }
+.submit { width: 100%; min-height: 46px; margin-top: 4px; }
+.footer { margin-top: 20px; text-align: center; font-size: .85rem; }
+.alert { align-items: flex-start; overflow-wrap: anywhere; }
+.alert svg { flex-shrink: 0; margin-top: 2px; }

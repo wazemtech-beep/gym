@@ -1,0 +1,1543 @@
+// Prisma schema for OXGEN GYM SaaS
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  OWNER
+  RECEPTIONIST
+  TRAINER
+  MEMBER
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  INVITATION_PENDING
+  PENDING_ACTIVATION
+}
+
+enum MemberRecordStatus {
+  CURRENT
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  NONE
+  UPCOMING
+  ACTIVE
+  EXPIRED
+  FROZEN
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  EASYPAISA
+  JAZZCASH
+  ADVANCE_CREDIT
+}
+
+enum PaymentStatus {
+  CONFIRMED
+  REVERSED
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum TransferProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum DurationUnit {
+  DAYS
+  CALENDAR_MONTHS
+  YEARS
+}
+
+enum PaymentTerms {
+  FULL_PAYMENT_ONLY
+  INSTALLMENTS_ALLOWED
+}
+
+enum InvoiceItemType {
+  MEMBERSHIP_FEE
+  ADMISSION_FEE
+  DISCOUNT
+  CREDIT_ADJUSTMENT
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model User {
+  id                 String        @id @default(cuid())
+  name               String
+  email              String?       @unique
+  emailVerified      Boolean       @default(false)
+  memberId           String?       @unique // for member accounts (e.g. OXG-000001)
+  phone              String?       @unique
+  passwordHash       String?
+  role               Role          @default(MEMBER)
+  status             AccountStatus @default(ACTIVE)
+  mustChangePassword Boolean       @default(false)
+  avatarUrl          String?
+  failedLoginAttempts Int          @default(0)
+  lockoutUntil       DateTime?
+  // Feature 14: per-staff overrides on top of role defaults, e.g. { "EXPENSES_MANAGE": true }
+  permissionGrants   Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  sessions           Session[]
+  accounts           Account[]
+  memberProfile      GymMember?    @relation("MemberToAccount")
+  assignedMembers    GymMember[]   @relation("TrainerToMembers")
+  invitationsCreated Invitation[]  @relation("CreatedInvitations")
+  passwordResets     PasswordResetToken[]
+  auditLogs          AuditLog[]    @relation("UserAuditLogs")
+
+  // Financial tracking relations
+  recordedPayments   Payment[]     @relation("RecordedPayments")
+  verifiedPayments   Payment[]     @relation("VerifiedPayments")
+  reversedPayments   Payment[]     @relation("ReversedPayments")
+  verifiedTransfers  TransferSubmission[] @relation("VerifiedTransfers")
+  recordedRefunds    Refund[]      @relation("RecordedRefunds")
+  openedCashSessions CashSession[] @relation("OpenedCashSessions")
+  receivedHandovers  CashSession[] @relation("ReceivedHandovers")
+  recordedExpenses   Expense[]     @relation("RecordedExpenses")
+  payrollExpenses    Expense[]     @relation("PayrollEmployee")
+  recordedExpensePayments ExpensePayment[] @relation("RecordedExpensePayments")
+  recordedAttendance AttendanceRecord[] @relation("RecordedAttendance")
+  voidedAttendance   AttendanceRecord[] @relation("VoidedAttendance")
+
+  // Features 15, 16 & 17 relations
+  reviewedRenewals        RenewalRequest[]     @relation("ReviewedRenewals")
+  trainerAssignments     TrainerAssignment[]  @relation("TrainerAssignments")
+  assignedTrainers        TrainerAssignment[]  @relation("AssignedTrainers")
+  trainerCreatedPlans     WorkoutPlan[]        @relation("TrainerCreatedPlans")
+  reviewedWorkoutSessions WorkoutSession[]     @relation("ReviewedWorkoutSessions")
+  authoredAnnouncements   Announcement[]       @relation("AuthoredAnnouncements")
+
+  // Features 18 & 19 relations
+  trainerDietPlans        DietPlan[]           @relation("TrainerDietPlans")
+  reviewedDietLogs        DietAdherenceLog[]   @relation("ReviewedDietLogs")
+  recordedMeasurements    ProgressMeasurement[] @relation("StaffRecordedMeasurements")
+  reviewedMeasurements    ProgressMeasurement[] @relation("ReviewedMeasurements")
+  trainerActivityReviews  TrainerActivityReview[] @relation("TrainerActivityReviews")
+
+  // Feature 20 relations
+  userNotifications       Notification[]       @relation("UserNotifications")
+  notificationPreferences NotificationPreference? @relation("UserNotificationPreferences")
+  deviceTokens            DevicePushToken[]    @relation("UserDeviceTokens")
+  notificationEvents      NotificationEvent[]  @relation("RecipientNotificationEvents")
+
+  // Feature enhancements: Freeze requests, Fee plan versions, Vendor refunds
+  reviewedFreezeRequests  MembershipFreezeRequest[] @relation("ReviewedFreezeRequests")
+  feePlanChanges          FeePlanHistory[]          @relation("FeePlanChanges")
+  recordedExpenseRefunds  ExpenseRefund[]           @relation("RecordedExpenseRefunds")
+
+  @@index([role])
+  @@index([status])
+}
+
+model Account {
+  id                    String   @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+  device       String?
+  // Feature 14: last time the user re-entered their password for a sensitive change
+  reauthenticatedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+// Public submissions are kept separate from active accounts until owner approval.
+model MemberRegistrationRequest {
+  id                    String   @id @default(cuid())
+  fullName              String
+  email                 String
+  phone                 String
+  passwordHash          String?
+  photoUrl              String?
+  joiningDate           DateTime?
+  dateOfBirth           DateTime?
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  fitnessGoal           String?
+  limitations           String?
+  status                String   @default("PENDING")
+  rejectionReason       String?
+  reviewedById          String?
+  reviewedAt            DateTime?
+  memberRecordId        String?
+  ipHash                String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email, status])
+  @@index([phone, status])
+  @@index([ipHash, createdAt])
+}
+
+model GymMember {
+  id                   String             @id @default(cuid())
+  memberId             String             @unique // Visible ID (e.g. OXG-000001)
+  fullName             String
+  phone                String
+  email                String?
+  photoUrl             String?
+  joiningDate          DateTime           @default(now())
+  status               MemberRecordStatus @default(CURRENT)
+  
+  userId               String?            @unique
+  user                 User?              @relation("MemberToAccount", fields: [userId], references: [id], onDelete: SetNull)
+
+  trainerId            String?
+  trainer              User?              @relation("TrainerToMembers", fields: [trainerId], references: [id], onDelete: SetNull)
+
+  dateOfBirth          DateTime?
+  address              String?
+  fitnessGoal          String?
+  limitations          String?
+  staffNote            String?
+  openingDues          Float?             @default(0)
+  admissionFeePreviouslyPaid Boolean     @default(false)
+  admissionHistoryNote String?
+  advanceBalance       Float?             @default(0)
+  emergencyContactName String?
+  emergencyContactPhone String?
+  notes                String?
+  archivedAt           DateTime?
+  archiveReason        String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  invitations          Invitation[]
+  invoices             Invoice[]
+  payments             Payment[]
+  advanceCredits       AdvanceCredit[]
+  transferSubmissions  TransferSubmission[]
+  memberships          Membership[]
+  attendance           AttendanceRecord[]
+
+  // Features 15, 16 & 17 relations
+  renewalRequests      RenewalRequest[]
+  freezeRequests       MembershipFreezeRequest[]
+  trainerAssignments   TrainerAssignment[]  @relation("MemberAssignments")
+  workoutPlans         WorkoutPlan[]        @relation("MemberWorkoutPlans")
+  workoutSessions      WorkoutSession[]     @relation("MemberWorkoutSessions")
+
+  // Features 18 & 19 relations
+  dietPreference       MemberDietPreference?
+  dietPlans            DietPlan[]           @relation("MemberDietPlans")
+  dietAdherenceLogs    DietAdherenceLog[]   @relation("MemberDietLogs")
+  progressGoals        ProgressGoal[]       @relation("MemberProgressGoals")
+  progressMeasurements ProgressMeasurement[] @relation("MemberMeasurements")
+  progressPhotos       ProgressPhoto[]      @relation("MemberProgressPhotos")
+
+  // Features 21 & 22 relations
+  fitnessConnection    FitnessConnection?
+  dailyActivitySummaries DailyActivitySummary[] @relation("MemberDailySummaries")
+  syncedExerciseSessions SyncedExerciseSession[] @relation("MemberSyncedSessions")
+  fitnessSyncBatches   FitnessSyncBatch[]     @relation("MemberFitnessBatches")
+  trainerActivityReviews TrainerActivityReview[] @relation("MemberActivityReviews")
+  fitnessDeletionAudits  FitnessDeletionAudit[]  @relation("MemberDeletionAudits")
+  fitnessSharingRequests FitnessSharingRequest[] @relation("MemberFitnessSharingRequests")
+
+  @@index([memberId])
+  @@index([phone])
+}
+
+model FeePlan {
+  id               String       @id @default(cuid())
+  name             String       // e.g. "Regular Monthly", "Student Monthly", "Quarterly", "Yearly"
+  description      String?      // e.g. "Full gym floor access with locker facility"
+  durationValue    Int          // e.g. 1, 3, 12, 15, 30
+  durationUnit     DurationUnit @default(CALENDAR_MONTHS)
+  membershipFee    Float        // e.g. 3000
+  admissionFee     Float        @default(0) // e.g. 1000 (one-time on first joining)
+  includedServices String?      // Comma-separated or JSON e.g. "Gym Access, Locker, General Coaching"
+  eligibility      String?      @default("Everyone") // e.g. "Everyone", "Students", "VIP"
+  paymentTerms     PaymentTerms @default(FULL_PAYMENT_ONLY)
+  isActive         Boolean      @default(true)
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  memberships      Membership[]
+  renewalRequests  RenewalRequest[]
+  history          FeePlanHistory[]
+
+  @@index([isActive])
+}
+
+model Membership {
+  id                   String           @id @default(cuid())
+  gymMemberId          String
+  gymMember            GymMember        @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  
+  feePlanId            String?
+  feePlan              FeePlan?         @relation(fields: [feePlanId], references: [id], onDelete: SetNull)
+
+  // Immutable snapshots of terms agreed at assignment time (Requirement Point 8 & 13)
+  planName             String           // e.g. "Regular Monthly"
+  durationValue        Int?             @default(1)
+  durationUnit         DurationUnit?    @default(CALENDAR_MONTHS)
+  startDate            DateTime
+  endDate              DateTime         // Last valid day
+  status               MembershipStatus @default(ACTIVE)
+  feeAmount            Float            @default(0) // Package fee snapshot
+  admissionFeeCharged  Float?           @default(0)
+  discountApplied      Float?           @default(0)
+  discountReason       String?
+  servicesSnapshot     String?          // e.g. "Gym Access, Locker"
+  frozenAt             DateTime?
+  freezeReason         String?
+  freezeResumeDate     DateTime?        // Planned resume date approved by owner (Feature 14 max-freeze rule)
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  invoices             Invoice[]
+  attendanceRecords    AttendanceRecord[]
+  freezeRequests       MembershipFreezeRequest[]
+
+  @@index([gymMemberId])
+  @@index([status])
+}
+
+model AttendanceRecord {
+  id             String      @id @default(cuid())
+  gymMemberId    String
+  gymMember      GymMember   @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  checkIn        DateTime    @default(now()) // Actual visit date/time
+  method         String      @default("MANUAL") // MANUAL, QR, BIOMETRIC
+  notes          String?
+  membershipId   String?
+  membership     Membership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  recordedById   String?
+  recordedBy     User?       @relation("RecordedAttendance", fields: [recordedById], references: [id], onDelete: SetNull)
+  overrideReason String?     // Reason if exception allowed for expired/unusual
+  isVoid         Boolean     @default(false)
+  voidReason     String?
+  voidedAt       DateTime?
+  voidedById     String?
+  voidedBy       User?       @relation("VoidedAttendance", fields: [voidedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now()) // System entry timestamp
+
+  @@index([gymMemberId])
+  @@index([checkIn])
+  @@index([isVoid])
+}
+
+model Invitation {
+  id              String     @id @default(cuid())
+  email           String?
+  phone           String?
+  role            Role
+  token           String     @unique
+  activationCode  String?
+  expiresAt       DateTime
+  usedAt          DateTime?
+  
+  memberRecordId  String?
+  memberRecord    GymMember? @relation(fields: [memberRecordId], references: [id], onDelete: SetNull)
+
+  createdById     String
+  createdBy       User       @relation("CreatedInvitations", fields: [createdById], references: [id])
+
+  createdAt       DateTime   @default(now())
+
+  @@index([token])
+  @@index([activationCode])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  resetCode String?   // 6-digit numeric code for members without email
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@index([resetCode])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorName  String?
+  actorRole  String?
+  action     String
+  entityType String
+  entityId   String?
+  details    String?
+  // Feature 14: structured audit data
+  reason          String?
+  changes         Json?    // [{ field, before, after }] — secrets are never stored
+  relatedEntityId String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  actor      User?    @relation("UserAuditLogs", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([entityType])
+  @@index([entityId])
+}
+
+model GymSettings {
+  id                  String   @id @default("default")
+  gymName             String   @default("OXGEN GYM")
+  tagline             String?  @default("Strength & Performance")
+  contactPhone        String?
+  contactEmail        String?
+  address             String?
+  logoUrl             String?
+  receiptPrefix       String   @default("OXG-RCP")
+  currency            String   @default("PKR")
+  timezone            String   @default("Asia/Karachi")
+  isInitialSetupDone  Boolean  @default(false)
+  attendanceEnabled   Boolean  @default(false)
+
+  // Feature 14: membership & fee defaults (apply to new transactions only)
+  invoiceDueDays             Int      @default(7)
+  maxFreezeDays              Int      @default(30)
+  expiryReminderDays         Int[]    @default([7, 1])
+  overdueReminderDays        Int[]    @default([3])
+  dueDateReminderEnabled     Boolean  @default(true)
+
+  // Feature 14: receipt settings
+  receiptFooter              String?  @default("Thank you for choosing OXGEN GYM")
+  receiptPrintFormat         String   @default("A4") // A4 | THERMAL_80MM
+  emailReceiptsAutomatically Boolean  @default(false)
+
+  // Feature 14: notification preferences per event (delivery engine: Feature 20)
+  notificationPrefs          Json?
+
+  // Feature 14: optimistic concurrency + last editor
+  version                    Int      @default(1)
+  updatedById                String?
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+}
+
+// ==========================================
+// FEATURE 2: FINANCIAL & COLLECTION MODELS
+// ==========================================
+
+model ReceivingAccount {
+  id            String        @id @default(cuid())
+  type          PaymentMethod // BANK_TRANSFER, EASYPAISA, JAZZCASH, CASH
+  displayName   String        // e.g. "Meezan Bank - Main Account"
+  accountTitle  String        // e.g. "OXGEN FITNESS CLUB"
+  accountNumber String        // e.g. "01020304050607"
+  instructions  String?       // "Transfer confirmation ka reference submit karein"
+  isActive      Boolean       @default(true)
+  isDefault     Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  payments            Payment[]
+  transferSubmissions TransferSubmission[]
+  expensePayments     ExpensePayment[]
+  expenseRefunds      ExpenseRefund[]
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique // e.g. "OXG-INV-000001"
+  gymMemberId   String
+  gymMember     GymMember     @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  
+  membershipId  String?
+  membership    Membership?   @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  title         String        // e.g. "Regular Monthly Fee"
+  totalAmount   Float
+  paidAmount    Float         @default(0)
+  balanceAmount Float
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  status        InvoiceStatus @default(UNPAID)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  allocations   PaymentAllocation[]
+  lineItems     InvoiceLineItem[]
+  installments  InvoiceInstallment[]
+
+  @@index([gymMemberId])
+  @@index([membershipId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model InvoiceLineItem {
+  id          String          @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String          // e.g. "Regular Monthly Membership Fee", "Admission Fee", "Approved Discount"
+  amount      Float           // Positive for fees, negative for discounts
+  itemType    InvoiceItemType @default(MEMBERSHIP_FEE)
+  createdAt   DateTime        @default(now())
+
+  @@index([invoiceId])
+}
+
+model InvoiceInstallment {
+  id                String            @id @default(cuid())
+  invoiceId         String
+  invoice           Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  installmentNumber Int               // 1, 2, 3...
+  amount            Float             // Installment amount
+  paidAmount        Float             @default(0) // Settled amount
+  dueDate           DateTime          // Due date for this installment
+  status            InstallmentStatus @default(PENDING)
+  createdAt         DateTime          @default(now())
+
+  @@index([invoiceId])
+  @@index([dueDate])
+}
+
+model Payment {
+  id                 String        @id @default(cuid())
+  receiptNumber      String        @unique // e.g. "OXG-RCP-000125"
+  idempotencyKey     String?       @unique // Stable payment request key to prevent duplicate charges
+  gymMemberId        String
+  gymMember          GymMember     @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  amount             Float
+  method             PaymentMethod
+  receivingAccountId String?
+  receivingAccount   ReceivingAccount? @relation(fields: [receivingAccountId], references: [id], onDelete: SetNull)
+  paymentDate        DateTime      // Actual payment receipt time in PKT
+  referenceNumber    String?       // Bank transfer / Easypaisa TRX ID
+  status             PaymentStatus @default(CONFIRMED)
+  recordedById       String
+  recordedBy         User          @relation("RecordedPayments", fields: [recordedById], references: [id])
+  verifiedById       String?
+  verifiedBy         User?         @relation("VerifiedPayments", fields: [verifiedById], references: [id])
+  reversalReason     String?
+  reversedAt         DateTime?
+  reversedById       String?
+  reversedBy         User?         @relation("ReversedPayments", fields: [reversedById], references: [id], onDelete: SetNull)
+  notes              String?
+  backdateReason     String?       // Mandatory justification if paymentDate is backdated
+  // Feature 14: gym branding as it was when the receipt was issued (later setting changes do not rewrite it)
+  brandingSnapshot   Json?
+  memberRemainingDues Float?      // Frozen member outstanding balance immediately after this payment
+  createdAt          DateTime      @default(now()) // System entry timestamp
+  updatedAt          DateTime      @updatedAt
+
+  allocations        PaymentAllocation[]
+  refunds            Refund[]
+  transferSubmission TransferSubmission?
+
+  @@index([gymMemberId])
+  @@index([paymentDate])
+  @@index([method])
+  @@index([status])
+  @@index([referenceNumber, receivingAccountId])
+}
+
+model PaymentAllocation {
+  id         String   @id @default(cuid())
+  paymentId  String
+  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId              String
+  invoice                Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount                 Float
+  balanceAfterAllocation Float?   // Frozen invoice balance immediately after this allocation was applied
+  createdAt              DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([invoiceId])
+}
+
+model TransferSubmission {
+  id                   String              @id @default(cuid())
+  gymMemberId          String
+  gymMember            GymMember           @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  amount               Float
+  receivingAccountId   String
+  receivingAccount     ReceivingAccount    @relation(fields: [receivingAccountId], references: [id])
+  transactionReference String?
+  proofImageUrl        String?
+  status               TransferProofStatus @default(PENDING)
+  rejectionReason      String?
+  transferDate         DateTime?           // Actual money transfer date reported by member
+  submittedAt          DateTime            @default(now())
+  verifiedAt           DateTime?
+  verifiedById         String?
+  verifiedBy           User?               @relation("VerifiedTransfers", fields: [verifiedById], references: [id])
+  
+  paymentId            String?             @unique
+  payment              Payment?            @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model AdvanceCredit {
+  id               String    @id @default(cuid())
+  gymMemberId      String
+  gymMember        GymMember @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  amount           Float     // Total credited amount
+  sourceType       String    @default("OVERPAYMENT") // "OVERPAYMENT" | "MANUAL_ADJUSTMENT"
+  paymentId        String?
+  appliedInvoiceId String?
+  appliedAmount    Float     @default(0)
+  notes            String?
+  createdAt        DateTime  @default(now())
+
+  @@index([gymMemberId])
+  @@index([paymentId])
+}
+
+model Refund {
+  id                     String        @id @default(cuid())
+  refundVoucherNumber    String?       @unique // e.g. "OXG-RFD-000001"
+  paymentId              String
+  payment                Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount                 Float
+  reason                 String
+  refundMethod           PaymentMethod @default(CASH)
+  refundDate             DateTime      @default(now())
+  recordedById           String
+  recordedBy             User          @relation("RecordedRefunds", fields: [recordedById], references: [id])
+  feeObligationTreatment String        // "CANCEL_OBLIGATION" | "KEEP_FEE_DUE"
+  createdAt              DateTime      @default(now())
+
+  @@index([paymentId])
+  @@index([refundDate])
+  @@index([refundVoucherNumber])
+}
+
+model CashSession {
+  id               String            @id @default(cuid())
+  sessionNumber    String            @unique // e.g. "CS-000001"
+  staffId          String
+  staff            User              @relation("OpenedCashSessions", fields: [staffId], references: [id])
+  openedAt         DateTime          @default(now())
+  closedAt         DateTime?
+  openingCash      Float             @default(0)
+  expectedCash     Float             @default(0)
+  countedCash      Float?
+  difference       Float?            // counted - expected
+  differenceReason String?
+  handoverToId     String?
+  handoverTo       User?             @relation("ReceivedHandovers", fields: [handoverToId], references: [id])
+  status           CashSessionStatus @default(OPEN)
+  createdAt        DateTime          @default(now())
+
+  expensePayments  ExpensePayment[]
+  expenseRefunds   ExpenseRefund[]
+
+  @@index([status])
+  @@index([openedAt])
+}
+
+// ==========================================
+// FEATURE 11: EXPENSES & OUTFLOW MODELS
+// ==========================================
+
+enum ExpenseStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique // Rent, Salaries, Utilities, Equipment, Repairs & Maintenance, Cleaning & Supplies, Marketing, Other
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  expenses    Expense[]
+
+  @@index([isActive])
+}
+
+model Expense {
+  id                  String          @id @default(cuid())
+  expenseNumber       String          @unique // e.g. "OXG-EXP-000001"
+  title               String          // e.g. "October Gym Building Rent"
+  categoryId          String
+  category            ExpenseCategory  @relation(fields: [categoryId], references: [id])
+  payee               String          // Vendor or employee name
+  totalAmount         Float
+  paidAmount          Float           @default(0)
+  balanceAmount       Float
+  expenseDate         DateTime        // Date of bill/charge in PKT
+  dueDate             DateTime?       // Payment deadline
+  status              ExpenseStatus   @default(UNPAID)
+  notes               String?
+  attachmentUrl       String?
+  employeeSalaryMonth String?         // For salaries e.g. "October 2026"
+  employeeId          String?
+  employee            User?           @relation("PayrollEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  recordedById        String
+  recordedBy          User            @relation("RecordedExpenses", fields: [recordedById], references: [id])
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  payments            ExpensePayment[]
+  refunds             ExpenseRefund[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([expenseDate])
+}
+
+model ExpensePayment {
+  id                 String            @id @default(cuid())
+  expenseId          String
+  expense            Expense           @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  amount             Float
+  paymentDate        DateTime          // Actual money outflow date in PKT
+  method             PaymentMethod
+  receivingAccountId String?           // Bank account outflow source
+  receivingAccount   ReceivingAccount? @relation(fields: [receivingAccountId], references: [id], onDelete: SetNull)
+  cashSessionId      String?           // Reception desk cash drawer outflow link
+  cashSession        CashSession?      @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  referenceNumber    String?           // Bank cheque / TRX ID
+  notes              String?
+  recordedById       String
+  recordedBy         User              @relation("RecordedExpensePayments", fields: [recordedById], references: [id])
+  createdAt          DateTime          @default(now())
+
+  @@index([expenseId])
+  @@index([paymentDate])
+  @@index([method])
+}
+
+// ============================================================================
+// FEATURES 15, 16 & 17: MEMBER DASHBOARD, TRAINER ASSIGNMENT & WORKOUT PLANS
+// ============================================================================
+
+enum RenewalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum WorkoutPlanStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ExerciseType {
+  STRENGTH
+  CARDIO
+  MOBILITY
+}
+
+enum WorkoutSessionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  PARTIALLY_COMPLETED
+  SKIPPED
+}
+
+model RenewalRequest {
+  id                    String               @id @default(cuid())
+  gymMemberId           String
+  gymMember             GymMember            @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  feePlanId             String
+  feePlan               FeePlan              @relation(fields: [feePlanId], references: [id])
+  preferredStartDate    DateTime
+  notes                 String?
+  status                RenewalRequestStatus @default(PENDING)
+  rejectionReason       String?
+  reviewedById          String?
+  reviewedBy            User?                @relation("ReviewedRenewals", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt            DateTime?
+  resultingMembershipId String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([gymMemberId])
+  @@index([status])
+}
+
+model TrainerAssignment {
+  id                    String    @id @default(cuid())
+  gymMemberId           String
+  gymMember             GymMember @relation("MemberAssignments", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  trainerId             String
+  trainer               User      @relation("TrainerAssignments", fields: [trainerId], references: [id])
+  assignedById          String
+  assignedBy            User      @relation("AssignedTrainers", fields: [assignedById], references: [id])
+  startDate             DateTime  @default(now())
+  endDate               DateTime?
+  coachingFocus         String?   // e.g. "Strength, Weight Loss, General Fitness"
+  notes                 String?
+  isActive              Boolean   @default(true)
+  consentMeasurements   Boolean   @default(false)
+  consentHealthActivity Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([gymMemberId])
+  @@index([trainerId])
+  @@index([isActive])
+}
+
+model WorkoutPlan {
+  id             String            @id @default(cuid())
+  title          String
+  goal           String
+  startDate      DateTime          @default(now())
+  endDate        DateTime?
+  status         WorkoutPlanStatus @default(DRAFT)
+  version        Int               @default(1)
+  gymMemberId    String
+  gymMember      GymMember         @relation("MemberWorkoutPlans", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  trainerId      String
+  trainer        User              @relation("TrainerCreatedPlans", fields: [trainerId], references: [id])
+  weeklySchedule String?           // e.g. "Monday, Wednesday, Friday"
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  workoutDays    WorkoutDay[]
+  sessions       WorkoutSession[]
+
+  @@index([gymMemberId])
+  @@index([trainerId])
+  @@index([status])
+}
+
+model WorkoutDay {
+  id          String            @id @default(cuid())
+  planId      String
+  plan        WorkoutPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  title       String            // e.g. "Upper Body", "Legs", "Cardio & Core"
+  dayOfWeek   String?           // "MONDAY", "TUESDAY", etc.
+  dayNumber   Int               @default(1)
+  order       Int               @default(0)
+
+  exercises   WorkoutExercise[]
+  sessions    WorkoutSession[]
+
+  @@index([planId])
+}
+
+model WorkoutExercise {
+  id                  String       @id @default(cuid())
+  workoutDayId        String
+  workoutDay          WorkoutDay   @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
+  name                String
+  type                ExerciseType @default(STRENGTH)
+  sets                Int?
+  reps                String?      // e.g. "10" or "8-12"
+  targetLoad          String?      // e.g. "20 kg", "RPE 8"
+  durationMinutes     Int?
+  distanceMeters      Int?
+  restSeconds         Int?         @default(60)
+  instructions        String?      // Technique cues
+  alternativeExercise String?
+  demoVideoUrl        String?
+  order               Int          @default(0)
+
+  exerciseLogs        ExerciseLog[]
+
+  @@index([workoutDayId])
+}
+
+model WorkoutSession {
+  id              String               @id @default(cuid())
+  gymMemberId     String
+  gymMember       GymMember            @relation("MemberWorkoutSessions", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  planId          String?
+  plan            WorkoutPlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  workoutDayId    String?
+  workoutDay      WorkoutDay?          @relation(fields: [workoutDayId], references: [id], onDelete: SetNull)
+  planVersion     Int?
+  sessionDate     DateTime             @default(now())
+  status          WorkoutSessionStatus @default(NOT_STARTED)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationMinutes Int?
+  skipReason      String?              // "Equipment unavailable", "Discomfort", "Time shortage"
+  memberNotes     String?
+  trainerFeedback String?
+  reviewedById    String?
+  reviewedBy      User?                @relation("ReviewedWorkoutSessions", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  isSynced        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  exerciseLogs    ExerciseLog[]
+
+  @@index([gymMemberId])
+  @@index([sessionDate])
+  @@index([status])
+}
+
+model ExerciseLog {
+  id                String           @id @default(cuid())
+  sessionId         String
+  session           WorkoutSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  workoutExerciseId String?
+  workoutExercise   WorkoutExercise? @relation(fields: [workoutExerciseId], references: [id], onDelete: SetNull)
+  exerciseName      String
+  exerciseType      ExerciseType     @default(STRENGTH)
+  setNumber         Int              @default(1)
+  plannedReps       String?
+  plannedWeight     Float?
+  actualReps        Int?
+  actualWeight      Float?
+  actualDuration    Int?
+  isSkipped         Boolean          @default(false)
+  skipReason        String?
+  notes             String?
+  createdAt         DateTime         @default(now())
+
+  @@index([sessionId])
+}
+
+model Announcement {
+  id               String               @id @default(cuid())
+  title            String
+  content          String
+  category         String               @default("GENERAL") // GENERAL, HOLIDAY, PROMO, MAINTENANCE
+  isPublished      Boolean              @default(true)
+  pinned           Boolean              @default(false)
+  audience         AnnouncementAudience @default(ALL_MEMBERS)
+  priority         AnnouncementPriority @default(NORMAL)
+  publishAt        DateTime             @default(now())
+  expiresAt        DateTime?
+  channels         String[]             @default(["IN_APP"]) // IN_APP, EMAIL, PUSH
+  attachmentUrl    String?
+  targetMemberIds  String[]             @default([])
+  version          Int                  @default(1)
+  recipientCount   Int                  @default(0)
+  emailSentCount   Int                  @default(0)
+  emailFailedCount Int                  @default(0)
+  pushSentCount    Int                  @default(0)
+  authorId         String
+  author           User                 @relation("AuthoredAnnouncements", fields: [authorId], references: [id])
+  notifications    Notification[]       @relation("AnnouncementNotifications")
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([isPublished])
+  @@index([pinned])
+  @@index([publishAt])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// FEATURES 18 & 19: DIET PLANS & PROGRESS TRACKING
+// ============================================================================
+
+enum DietPlanStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MealSlotType {
+  BREAKFAST
+  MORNING_SNACK
+  LUNCH
+  EVENING_SNACK
+  DINNER
+  LATE_SNACK
+  PRE_WORKOUT
+  POST_WORKOUT
+}
+
+enum MealAdherenceStatus {
+  FOLLOWED
+  PARTIALLY_FOLLOWED
+  DIFFERENT_MEAL
+  SKIPPED
+}
+
+enum MeasurementSource {
+  MANUAL
+  STAFF_ASSISTED
+  SYNCED
+}
+
+enum PhotoViewType {
+  FRONT
+  SIDE
+  BACK
+}
+
+model MemberDietPreference {
+  id              String     @id @default(cuid())
+  gymMemberId     String     @unique
+  gymMember       GymMember  @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  goal            String?    // Weight loss, muscle gain, general fitness
+  foodPreference  String?    // Vegetarian, Non-vegetarian, etc.
+  allergies       String?    // Peanuts, Lactose, Shellfish, etc.
+  budget          String?    // Student/Budget, Moderate, Premium
+  routine         String?    // Wake up 7am, Work 9-6, Sleep 11pm
+  cookingAccess   String?    // Home, Hostel, Outside meals
+  dislikedFoods   String?    // Practical alternatives needed
+  restrictions    String?    // Halal, Gluten-free, etc.
+  notes           String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model DietPlan {
+  id                   String          @id @default(cuid())
+  gymMemberId          String
+  gymMember            GymMember       @relation("MemberDietPlans", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  trainerId            String
+  trainer              User            @relation("TrainerDietPlans", fields: [trainerId], references: [id])
+  title                String
+  goal                 String
+  startDate            DateTime        @default(now())
+  reviewDate           DateTime?
+  status               DietPlanStatus  @default(DRAFT)
+  version              Int             @default(1)
+  notes                String?
+  specialistReference  String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  mealSlots            DietMealSlot[]
+  adherenceLogs        DietAdherenceLog[]
+
+  @@index([gymMemberId])
+  @@index([trainerId])
+  @@index([status])
+}
+
+model DietMealSlot {
+  id                String       @id @default(cuid())
+  dietPlanId        String
+  dietPlan          DietPlan     @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
+  slotType          MealSlotType @default(BREAKFAST)
+  title             String       // e.g. "Power Breakfast"
+  suggestedTiming   String?      // e.g. "08:30 AM"
+  foodItems         String       // Food + clear portion/unit
+  alternatives      String?      // Similar practical options
+  notes             String?
+  estimatedCalories Float?
+  estimatedProtein  Float?
+  estimatedCarbs    Float?
+  estimatedFats     Float?
+  order             Int          @default(0)
+
+  adherenceLogs     DietAdherenceLog[]
+
+  @@index([dietPlanId])
+}
+
+model DietAdherenceLog {
+  id              String              @id @default(cuid())
+  gymMemberId     String
+  gymMember       GymMember           @relation("MemberDietLogs", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  dietPlanId      String?
+  dietPlan        DietPlan?           @relation(fields: [dietPlanId], references: [id], onDelete: SetNull)
+  mealSlotId      String?
+  mealSlot        DietMealSlot?       @relation(fields: [mealSlotId], references: [id], onDelete: SetNull)
+  date            DateTime            @default(now())
+  slotType        MealSlotType        @default(BREAKFAST)
+  status          MealAdherenceStatus @default(FOLLOWED)
+  actualFood      String?
+  actualQuantity  String?
+  skipReason      String?
+  feedback        String?             // Budget, taste, availability, difficulty
+  trainerFeedback String?
+  reviewedById    String?
+  reviewedBy      User?               @relation("ReviewedDietLogs", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  createdAt       DateTime            @default(now())
+
+  @@index([gymMemberId, date])
+  @@index([dietPlanId])
+}
+
+model ProgressGoal {
+  id             String    @id @default(cuid())
+  gymMemberId    String
+  gymMember      GymMember @relation("MemberProgressGoals", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  targetWeightKg Float?
+  targetWaistCm  Float?
+  targetDate     DateTime?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([gymMemberId])
+}
+
+model ProgressMeasurement {
+  id              String            @id @default(cuid())
+  gymMemberId     String
+  gymMember       GymMember         @relation("MemberMeasurements", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  date            DateTime          @default(now())
+  isBaseline      Boolean           @default(false)
+  weightKg        Float?
+  waistCm         Float?
+  chestCm         Float?
+  hipsCm          Float?
+  armsCm          Float?
+  thighsCm        Float?
+  source          MeasurementSource @default(MANUAL)
+  recordedById    String?
+  recordedBy      User?             @relation("StaffRecordedMeasurements", fields: [recordedById], references: [id], onDelete: SetNull)
+  notes           String?
+  trainerFeedback String?
+  reviewedById    String?
+  reviewedBy      User?             @relation("ReviewedMeasurements", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([gymMemberId, date])
+}
+
+model ProgressPhoto {
+  id               String        @id @default(cuid())
+  gymMemberId      String
+  gymMember        GymMember     @relation("MemberProgressPhotos", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  date             DateTime      @default(now())
+  viewType         PhotoViewType @default(FRONT)
+  photoUrl         String
+  storageKey       String?
+  notes            String?
+  shareWithTrainer Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([gymMemberId, date])
+}
+
+// ============================================================================
+// FEATURE 20: NOTIFICATIONS & ANNOUNCEMENTS
+// ============================================================================
+
+enum NotificationCategory {
+  PAYMENT
+  MEMBERSHIP
+  TRAINING
+  ANNOUNCEMENT
+  OPERATIONAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+}
+
+enum NotificationDeliveryStatus {
+  QUEUED
+  ACCEPTED
+  FAILED
+  SKIPPED
+  READ
+}
+
+enum AnnouncementAudience {
+  ALL_MEMBERS
+  ACTIVE_MEMBERS
+  STAFF
+  SELECTED_MEMBERS
+}
+
+enum AnnouncementPriority {
+  NORMAL
+  IMPORTANT
+}
+
+model NotificationEvent {
+  id              String               @id @default(cuid())
+  eventType       String               // INVOICE_ISSUED, PAYMENT_CONFIRMED, INSTALLMENT_DUE, etc.
+  recipientUserId String
+  recipientUser   User                 @relation("RecipientNotificationEvents", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  title           String
+  message         String
+  category        NotificationCategory @default(OPERATIONAL)
+  dedupKey        String?              @unique // prevents duplicate creation on repeated runs or retries
+  entityType      String?              // INVOICE, PAYMENT, RECEIPT, WORKOUT_PLAN, etc.
+  entityId        String?
+  actionUrl       String?
+  metadata        Json?
+  processed       Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+
+  @@index([processed, createdAt])
+  @@index([recipientUserId])
+}
+
+model Notification {
+  id             String                     @id @default(cuid())
+  userId         String
+  user           User                       @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  message        String
+  category       NotificationCategory       @default(OPERATIONAL)
+  entityType     String?
+  entityId       String?
+  actionUrl      String?
+  isRead         Boolean                    @default(false)
+  readAt         DateTime?
+  deliveryStatus NotificationDeliveryStatus @default(QUEUED)
+  emailStatus    NotificationDeliveryStatus?
+  emailError     String?
+  pushStatus     NotificationDeliveryStatus?
+  pushError      String?
+  eventId        String?
+  announcementId String?
+  announcement   Announcement?              @relation("AnnouncementNotifications", fields: [announcementId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                   @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([category])
+  @@index([announcementId])
+}
+
+model NotificationPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation("UserNotificationPreferences", fields: [userId], references: [id], onDelete: Cascade)
+  emailPayment       Boolean  @default(true)
+  emailMembership    Boolean  @default(true)
+  emailTraining      Boolean  @default(true)
+  emailAnnouncements Boolean  @default(true)
+  pushPayment        Boolean  @default(true)
+  pushMembership     Boolean  @default(true)
+  pushTraining       Boolean  @default(true)
+  pushAnnouncements  Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model DevicePushToken {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserDeviceTokens", fields: [userId], references: [id], onDelete: Cascade)
+  token       String   @unique
+  platform    String   @default("android") // android, ios, web
+  deviceModel String?
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+model ReminderScheduleConfig {
+  id                      String    @id @default(cuid())
+  membershipExpiryDays    Int[]     @default([7, 1])
+  installmentDueNotice    Boolean   @default(true)
+  overdueGraceDays        Int       @default(3)
+  membershipExpiredNotice Boolean   @default(true)
+  timezone                String    @default("Asia/Karachi")
+  lastRunAt               DateTime?
+  updatedAt               DateTime  @updatedAt
+}
+
+// ============================================================================
+// FEATURES 21 & 22: FITNESS DATA CONNECTION & ACTIVITY SYNC + HISTORY
+// ============================================================================
+
+enum FitnessConnectionStatus {
+  DISCONNECTED
+  CONNECTED
+  LIMITED_PERMISSIONS
+  SETUP_REQUIRED
+  UNSUPPORTED
+}
+
+enum FitnessDataCategory {
+  STEPS
+  DISTANCE
+  EXERCISE_SESSIONS
+  ACTIVE_CALORIES
+}
+
+model FitnessConnection {
+  id                          String                  @id @default(cuid())
+  gymMemberId                 String                  @unique
+  gymMember                   GymMember               @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  status                      FitnessConnectionStatus @default(DISCONNECTED)
+  platform                    String                  @default("HEALTH_CONNECT") // Android Health Connect
+  appVersion                  String?
+  deviceModel                 String?
+  reportedPermissions         FitnessDataCategory[]   @default([])
+  backendUploadConsent        Boolean                 @default(false)
+  backendUploadConsentVersion  String?
+  backendUploadConsentAt      DateTime?
+  trainerSharingEnabled       Boolean                 @default(false)
+  trainerSharingCategories    FitnessDataCategory[]   @default([])
+  trainerConfirmedCoachId     String?                 // Current assigned trainer when sharing was confirmed
+  historyRangeType            String?                 @default("ALL") // ALL, LAST_30_DAYS, LAST_90_DAYS, CONSENT_ONWARD
+  historyRangeStart           DateTime?               // Date boundary before which trainer CANNOT see data
+  trainerSharingConsentVersion String?                @default("v1.0")
+  trainerSharingConfirmedAt   DateTime?
+  lastSyncedAt                DateTime?
+  lastSyncStatus              String?                 // "SUCCESS", "PARTIAL", "FAILED"
+  lastSyncError               String?
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+
+  @@index([gymMemberId])
+  @@index([status])
+}
+
+model DailyActivitySummary {
+  id            String    @id @default(cuid())
+  gymMemberId   String
+  gymMember     GymMember @relation("MemberDailySummaries", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  date          String    // "YYYY-MM-DD" in Asia/Karachi timezone
+  steps         Int?
+  distanceKm    Float?
+  activeCalories Float?
+  source        String    @default("HEALTH_CONNECT")
+  hasData       Boolean   @default(true) // true if source reported data, false if no records available
+  coverageNote  String?   // e.g. "Phone + WearOS aggregated"
+  lastSyncedAt  DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([gymMemberId, date])
+  @@index([gymMemberId, date])
+}
+
+model SyncedExerciseSession {
+  id              String    @id @default(cuid())
+  gymMemberId     String
+  gymMember       GymMember @relation("MemberSyncedSessions", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  sourceRecordId  String    // Health Connect record UID (e.g. "hc-rec-12345")
+  exerciseType    String    // Running, Walking, Weightlifting, Cycling, Swimming, HIIT, etc.
+  title           String?
+  startTime       DateTime
+  endTime         DateTime
+  durationMinutes Int
+  activeCalories  Float?
+  distanceKm      Float?
+  source          String    @default("HEALTH_CONNECT")
+  notes           String?
+  lastSyncedAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([gymMemberId, sourceRecordId])
+  @@index([gymMemberId, startTime])
+}
+
+model FitnessSyncBatch {
+  id             String    @id @default(cuid())
+  gymMemberId    String
+  gymMember      GymMember @relation("MemberFitnessBatches", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  batchId        String    @unique // Client-generated idempotency token (UUID)
+  deviceTimezone String    @default("Asia/Karachi")
+  summaryCount   Int       @default(0)
+  sessionCount   Int       @default(0)
+  status         String    @default("SUCCESS")
+  createdAt      DateTime  @default(now())
+
+  @@index([gymMemberId, createdAt])
+}
+
+model TrainerActivityReview {
+  id                   String     @id @default(cuid())
+  trainerId            String
+  trainer              User       @relation("TrainerActivityReviews", fields: [trainerId], references: [id])
+  gymMemberId          String
+  gymMember            GymMember  @relation("MemberActivityReviews", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  reviewedStartDate    String     // "YYYY-MM-DD"
+  reviewedEndDate      String     // "YYYY-MM-DD"
+  observation          String     // Internal coaching assessment
+  memberFeedback       String?    // Member feedback context
+  suggestedAction      String?    // "PLAN_ADJUSTMENT", "FOLLOW_UP", "REST_DAY", "CONSISTENCY_CHECK"
+  memberFacingNote     String?    // Feedback displayed to member
+  relatedWorkoutPlanId String?
+  relatedDietPlanId    String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@index([gymMemberId, createdAt])
+  @@index([trainerId])
+}
+
+model FitnessSharingRequest {
+  id                  String                @id @default(cuid())
+  trainerId           String
+  gymMemberId         String
+  gymMember           GymMember             @relation("MemberFitnessSharingRequests", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  requestedCategories FitnessDataCategory[] @default([])
+  status              String                @default("PENDING") // PENDING, APPROVED, REJECTED
+  message             String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([gymMemberId, status])
+  @@index([trainerId])
+}
+
+model FitnessDeletionAudit {
+  id                    String    @id @default(cuid())
+  gymMemberId           String
+  gymMember             GymMember @relation("MemberDeletionAudits", fields: [gymMemberId], references: [id], onDelete: Cascade)
+  scope                 String    // "ALL", "DATE_RANGE", "CATEGORY"
+  targetCategory        String?   // "STEPS", "DISTANCE", "ACTIVE_CALORIES", "EXERCISE_SESSIONS"
+  startDate             String?
+  endDate               String?
+  deletedSummariesCount Int       @default(0)
+  deletedSessionsCount  Int       @default(0)
+  createdAt             DateTime  @default(now())
+
+  @@index([gymMemberId, createdAt])
+}
+
+enum FreezeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model MembershipFreezeRequest {
+  id                 String              @id @default(cuid())
+  membershipId       String
+  membership         Membership          @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  gymMemberId        String
+  gymMember          GymMember           @relation(fields: [gymMemberId], references: [id], onDelete: Cascade)
+  requestedDays      Int
+  plannedResumeDate  DateTime?
+  reason             String
+  status             FreezeRequestStatus @default(PENDING)
+  reviewNotes        String?
+  reviewedById       String?
+  reviewedBy         User?               @relation("ReviewedFreezeRequests", fields: [reviewedById], references: [id])
+  reviewedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([membershipId])
+  @@index([gymMemberId])
+  @@index([status])
+}
+
+model FeePlanHistory {
+  id               String       @id @default(cuid())
+  feePlanId        String
+  feePlan          FeePlan      @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
+  version          Int
+  name             String
+  description      String?
+  durationValue    Int
+  durationUnit     DurationUnit @default(CALENDAR_MONTHS)
+  membershipFee    Float
+  admissionFee     Float        @default(0)
+  includedServices String?
+  eligibility      String?
+  paymentTerms     PaymentTerms @default(FULL_PAYMENT_ONLY)
+  changedById      String?
+  changedBy        User?        @relation("FeePlanChanges", fields: [changedById], references: [id])
+  changeReason     String?
+  createdAt        DateTime     @default(now())
+
+  @@index([feePlanId])
+  @@index([version])
+}
+
+model ExpenseRefund {
+  id                 String            @id @default(cuid())
+  refundNumber       String            @unique // e.g. "OXG-VRF-000101"
+  expenseId          String
+  expense            Expense           @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  amount             Float
+  refundDate         DateTime          @default(now())
+  method             PaymentMethod     @default(CASH)
+  receivingAccountId String?
+  receivingAccount   ReceivingAccount? @relation(fields: [receivingAccountId], references: [id], onDelete: SetNull)
+  cashSessionId      String?
+  cashSession        CashSession?      @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  reason             String
+  recordedById       String
+  recordedBy         User              @relation("RecordedExpenseRefunds", fields: [recordedById], references: [id])
+  createdAt          DateTime          @default(now())
+
+  @@index([expenseId])
+  @@index([refundDate])
+}

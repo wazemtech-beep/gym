@@ -1,0 +1,8 @@
+"use client";
+import ModalOverlay from "@/components/common/ModalOverlay";
+import { apiFetch } from "@/lib/apiFetch";
+import { useState } from "react";
+export default function OpeningBalanceCorrection({ memberId, onSaved }: { memberId: string; onSaved: () => void }) {
+  const [open, setOpen] = useState(false), [amount, setAmount] = useState(""), [reason, setReason] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false);
+  return <><button className="btn btn-secondary" onClick={() => setOpen(true)}>Correct opening balance</button>{open && <ModalOverlay className="modal-overlay"><form className="glass-panel" style={{ padding: 24, width: "min(440px, 95vw)" }} onSubmit={async e => { e.preventDefault(); setBusy(true); setError(""); try { const response = await apiFetch(`/api/v1/members/${memberId}/opening-balance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount: Number(amount), reason }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); setOpen(false); onSaved(); } catch(err: any) { setError(err.message); } finally { setBusy(false); } }}><h3>Opening balance</h3><label>Correct original amount<input className="input-field" type="number" min="0" step="0.01" required value={amount} onChange={e => setAmount(e.target.value)} /></label><label>Reason<input className="input-field" required value={reason} onChange={e => setReason(e.target.value)} /></label>{error && <p role="alert">{error}</p>}<button className="btn btn-primary" disabled={busy}>Save correction</button><button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>Cancel</button></form></ModalOverlay>}</>;
+}

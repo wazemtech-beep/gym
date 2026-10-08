@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "OXGEN GYM",
+    "slug": "oxgen-gym",
+    "scheme": "oxgengym",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.oxgen.gym"
+    },
+    "android": {
+      "package": "com.oxgen.gym",
+      "adaptiveIcon": {
+        "backgroundColor": "#2D573E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a profile photo, progress photo or payment proof.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-sharing",
+      "expo-build-properties",
+      "react-native-health-connect",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
+    ],
+    "extra": {
+      "firebaseConfiguredAndroid": false,
+      "firebaseConfiguredIos": false,
+      "router": {},
+      "eas": {
+        "projectId": "fc22fc88-95b5-42f3-a4cd-7fd60dd264b8"
+      }
+    }
+  }
+}

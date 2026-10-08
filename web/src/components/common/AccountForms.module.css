@@ -1,0 +1,14 @@
+.upload { display: grid; gap: 10px; min-width: 0; width: 100%; }
+.preview { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; min-width: 0; flex-wrap: wrap; }
+.image { width: 56px; height: 56px; max-width: 56px; object-fit: cover; border-radius: 9px; flex: 0 0 56px; }
+.caption { flex: 1; min-width: 90px; font-size: .85rem; display: flex; align-items: center; gap: 6px; }
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.choose { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; width: 100%; border: 1px dashed var(--border-subtle); border-radius: 10px; background: var(--bg-secondary, transparent); color: inherit; cursor: pointer; }
+.error { color: var(--danger, #e86b6b); font-size: .85rem; overflow-wrap: anywhere; }
+.overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 24px; }
+.dialog { width: 100%; max-width: 440px; max-height: calc(100dvh - 48px); overflow-y: auto; padding: 24px; display: grid; gap: 20px; border-radius: 16px; background: var(--bg-surface, #fff); box-shadow: 0 20px 80px #0006; }
+.heading { margin: 0; font-size: 1.35rem; }
+.field { display: grid; gap: 8px; min-width: 0; }
+.field input { width: 100%; min-width: 0; box-sizing: border-box; }
+.status { margin: 0; font-size: .9rem; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .overlay { padding: 12px; } .dialog { padding: 20px; max-height: calc(100dvh - 24px); } }

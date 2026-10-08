@@ -1,0 +1,57 @@
+.page { min-width: 0; }
+.page > h1 { font-size: clamp(1.9rem, 3vw, 2.45rem); line-height: 1.15; margin: 0 0 24px; }
+.layout { display: grid; gap: 22px; align-items: start; }
+.layout > * { min-width: 0; }
+.layout > section { margin: 0 !important; }
+.client { min-width: 0; }
+.overviewGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin-bottom: 24px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; overflow: hidden; }
+.overviewGrid > :global(.glass-panel) { background: transparent; border: 0; border-radius: 0 !important; box-shadow: none !important; min-width: 0; }
+.connectedStack { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; overflow: hidden; margin-bottom: 24px; }
+.connectedStack > :global(.glass-panel) { border: 0; border-radius: 0 !important; box-shadow: none !important; margin: 0 !important; }
+.connectedStack > :global(.glass-panel) + :global(.glass-panel) { border-top: 1px solid var(--border-subtle); }
+.overviewGrid > :global(.glass-panel) + :global(.glass-panel) { border-left: 1px solid var(--border-subtle); }
+.overviewGrid > :only-child { grid-column: 1 / -1; }
+@media (max-width: 1000px) { .overviewGrid { grid-template-columns: minmax(0, 1fr); } .overviewGrid > :global(.glass-panel) + :global(.glass-panel) { border-left: 0; border-top: 1px solid var(--border-subtle); } }
+.flexRow { flex-wrap: wrap; gap: 12px; }
+.flexRow > div { min-width: 0; }
+.flexRow > button { max-width: 100%; }
+.profileForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
+.profileForm label { display: grid; gap: 7px; min-width: 0; font-weight: 500; }
+.profileForm label:first-child { grid-column: 1 / -1; }
+.profileForm textarea { min-height: 85px; resize: vertical; }
+.profileForm button { justify-self: start; }
+.workoutCard { min-height: 260px; }
+.workoutHistory { min-height: 230px; }
+.loadingCardHeading { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.loadingCardHeading h3 { font-size: 1.2rem; font-weight: 600; margin: 0; }
+.loadingIcon { display: inline-flex; padding: 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-primary); }
+.skeletonContent { display: grid; gap: 18px; margin-top: 20px; }
+.skeleton { display: block; width: 100%; height: 13px; border-radius: 6px; background: var(--border-subtle); animation: skeletonPulse 1.6s ease-in-out infinite; }
+.skeletonTitle { width: 55%; height: 20px; margin-bottom: 6px; }
+.skeletonRow { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); }
+.skeletonRow > span:first-child { width: 60%; }
+.skeletonShort { width: 22%; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.loadingStack { display: grid; gap: 24px; min-width: 0; margin-bottom: 24px; }
+.loadingPanel { padding: 24px; min-height: 200px; }
+.loadingPanel h3 { font-size: 1.2rem; margin: 0; }
+.loadingPrivacyGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.loadingPrivacyGrid .loadingPanel { min-height: 145px; }
+.loadingPrivacyGrid .skeletonContent { gap: 10px; }
+.loadingMetricGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.loadingMetric { padding: 20px; min-height: 125px; }
+.loadingMetric h3 { margin: 0; font-family: var(--font-body); font-size: .8rem; font-weight: 500; color: var(--text-muted); }
+@media (max-width: 1000px) { .loadingMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 500px) { .loadingMetricGrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .loadingPrivacyGrid { grid-template-columns: minmax(0, 1fr); } }
+.sectionActions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.requestCard { padding: 24px; margin-bottom: 24px; }
+.requestHeading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.requestHeading h3 { margin: 0; font-size: 1.2rem; }
+.requestForm { display: grid; gap: 14px; margin-top: 18px; }
+.requestForm label { display: grid; gap: 8px; }
+.requestForm textarea { width: 100%; min-height: 100px; resize: vertical; }
+.requestForm button { justify-self: start; }
+@keyframes skeletonPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+@media (max-width: 600px) { .profileForm { grid-template-columns: minmax(0, 1fr); } .overviewGrid { margin-bottom: 20px; } .flexRow { align-items: flex-start; } }

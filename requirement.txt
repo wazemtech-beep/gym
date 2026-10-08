@@ -1,0 +1,3058 @@
+#
+	Feature
+	Basic flow
+	1
+	Login + roles
+	Login → owner, receptionist, trainer ya member ke mutabiq access
+	2
+	Dashboard
+	Collection, dues, active members aur expiring memberships ka overview
+	3
+	Member management
+	Member add → details/photo → unique member ID → profile
+	4
+	Multiple fee plans
+	Monthly/quarterly/yearly/custom plan → price aur duration set
+	5
+	Membership + renewal
+	Member ko plan assign → validity dates → renew/freeze/cancel
+	6
+	Invoices + dues
+	Fee invoice create → due date → unpaid/partial/paid status
+	7
+	Manual payments
+	Cash ya account transfer → staff verification → payment entry
+	8
+	Partial payments + opening dues
+	Kuch amount receive → remaining balance; purana balance bhi enter
+	9
+	Admission fee + discounts
+	Joining fee add → authorized discount → final payable amount
+	10
+	Receipts
+	Confirmed payment → unique receipt → print/download
+	11
+	Expenses
+	Rent/salary/bills entry → expense reports
+	12
+	Reports + export
+	Date filter → collection, cash/bank, dues aur expenses → export
+	13
+	Attendance — optional
+	Enable ho toh check-in; disable ho toh baaki system normal
+	14
+	Settings + audit history
+	Gym/payment details configure; staff changes aur payment corrections track
+	15
+	Member dashboard
+	Apna plan, expiry, dues, payments aur receipts dekhe
+	16
+	Trainer assignment
+	Admin trainer assign kare → trainer ko assigned members dikhein
+	17
+	Workout plans
+	Trainer exercises/sets/reps assign kare → member completion log kare
+	18
+	Diet plans
+	Member goals/preferences de → trainer diet guidance assign/update kare
+	19
+	Progress tracking
+	Weight, measurements, optional photos → weekly/monthly comparison
+	20
+	Notifications + announcements
+	Fee/expiry reminders, plan updates aur gym announcements
+	21
+	Fitness data connection
+	Member connect kare → selected data permissions grant kare
+	22
+	Activity sync + history
+	Available activity data → app/backend sync → daily/weekly summary
+	23
+	Trainer activity insights
+	Assigned trainer steps, workouts aur trends dekhe → plan adjust kare
+	24
+	Sharing + disconnect controls
+	Member trainer sharing choose kare → revoke/disconnect/delete synced data
+	
+
+
+
+1. Account kaun banayega?
+Public signup se koi bhi admin ya trainer nahi ban sakega.
+Account        Kaise banega?
+Owner        Initial setup ke waqt ek baar owner account create hoga
+Receptionist        Owner staff section se account create/invite karega
+Trainer        Owner staff section se account create/invite karega
+Member        Staff member register karega; uske baad member ka login activate hoga
+
+
+
+
+Member ka gym record aur login account separate honge. App use na karne wale member ka record bhi fees system mein rahega.
+2. Owner ka pehla login
+Initial setup ka flow:
+1. Backend deploy karte waqt secure setup command se owner ka email aur initial password set karenge.
+2. Password ka hash database mein save hoga.
+3. Owner login karega.
+4. First login par initial password change karega.
+5. Owner gym details configure karega.
+6. Uske baad staff accounts create kar sakega.
+Setup dobara run karke doosra owner create nahi hona chahiye. Owner account create karne ka public endpoint nahi rakhenge.
+3. Staff account create karne ka flow
+Owner → Staff → Add Staff → details + role → invitation → password set → login.
+Example: owner receptionist add karega:
+Field        Example
+Name        Ali
+Email        ali@example.com
+Role        Receptionist
+Status        Invitation pending
+
+
+
+
+Phir:
+1. Backend owner ki permission verify karega.
+2. Pending account create hoga.
+3. Limited-time, single-use activation link generate hoga.
+4. Tumhara custom email backend Google SMTP se branded invitation bhejega.
+5. Ali link open karke apna password set karega.
+6. Account active ho jayega.
+7. Login ke baad receptionist dashboard khulega.
+Expired invitation ko owner resend kar sakega; purana link invalid ho jayega. Email delivery fail ho toh owner retry kar sakega.
+4. Member account activate karne ka flow
+Staff member register kare → “Activate app access” → activation → password set → member login.
+Do cases rakhenge:
+Member ki situation        Activation
+Email available hai        Email par activation link
+Email nahi hai        Reception par identity verify karke staff limited-time, single-use activation code issue kare
+
+
+
+
+Email na hone par member Member ID + password se login karega. Activation code identity verify karne ke baad member ko diya jayega.
+Member khud activation mein role select nahi karega. Backend account ko uske existing member record se link karke Member role assign karega.
+5. Normal login ka actual flow
+Web aur Flutter mein same backend authentication use hogi:
+1. User email ya Member ID + password enter karega.
+2. App login request backend ko bhejegi.
+3. Backend account find karega aur password verify karega.
+4. Account active hai ya suspended, yeh check hoga.
+5. Successful login par session create hoga.
+6. Backend user ki identity, role aur permissions return karega.
+7. App correct dashboard open karegi.
+Role        Login ke baad
+Owner        Owner dashboard
+Receptionist        Reception dashboard
+Trainer        Assigned members dashboard
+Member        Personal dashboard
+
+
+
+
+Wrong credentials par generic message hoga: “Login details incorrect hain.” Repeated failed attempts par temporary rate limit lagegi.
+6. Login yaad kaise rahega?
+Better Auth se passwords aur sessions manage karenge; custom email templates/sending tumhare backend mein honge.
+Platform        Session handling
+Next.js web panels        Secure, HttpOnly cookie; browser requests ke saath session bhejega
+Flutter        Auth integration ke mutabiq session credential device ke secure storage mein; API requests ke saath bhejega
+Backend        Har protected request par session validity aur current permissions check karega
+
+
+
+
+Session expire ya revoke ho jaye toh app dobara login karwayegi. Logout par backend session invalidate karega aur device/browser se credential remove hoga.
+7. Roles aur permissions kaise enforce hongi?
+Role batayega user kis category ka hai; permissions batayengi kaunsa action allowed hai.
+Action        Owner        Receptionist        Trainer        Member
+Staff create / role change        ✅        —        —        —
+Member register/update        ✅        ✅        —        Apne allowed profile fields
+Membership assign/renew        ✅        ✅        —        Renewal request
+Payment record/verify        ✅        ✅        —        Apna transfer proof submit
+Payment reversal/refund        ✅        —        —        —
+Gym financial reports        ✅        —        —        —
+Workout/diet assign        ✅        —        Assigned members        —
+Progress/activity view        Consent ke mutabiq        —        Assigned + shared data        Apna data
+Gym settings        ✅        —        —        —
+
+
+
+
+Yeh starting permission defaults hain. Owner role hone se private fitness data ki consent automatically bypass nahi hogi.
+Backend har request par teen checks karega:
+Valid session? → Action allowed? → Is specific record ka access allowed?
+Example: trainer kisi member ki progress open kare:
+- Trainer logged in hona chahiye.
+- Woh member us trainer ko assigned hona chahiye.
+- Activity data ke liye member ki sharing permission bhi honi chahiye.
+Sirf frontend par button hide karna security nahi hoga. Direct API request par bhi wahi checks lagenge.
+8. Password bhool jaye toh?
+Situation        Flow
+Email wala account        Forgot password → custom email link → new password
+Email ke baghair member        Reception par identity verify → staff reset code issue → member new password set kare
+
+
+
+
+Reset links/codes limited-time aur single-use honge. Password reset hone par purane sessions revoke karenge. Staff member ka current password dekh nahi sakega.
+9. Role change, suspension aur membership expiry
+Event        System ka behavior
+Owner staff ka role change kare        Permissions update; existing sessions revoke; next login par naya access
+Staff gym chhor de        Account suspend; sessions revoke
+Member login suspend ho        Login/API access band; financial history preserve
+Membership expire ho        Member login kar sake; expiry, dues aur receipts dekh sake
+User logout kare        Current session end
+“Logout all devices” kare        Us account ke saare sessions end
+
+
+
+
+Membership expiry aur login suspension alag cheezein hain. Expired membership wale member ko renewal aur payment information dekhni chahiye.
+10. Database mein kya rahega?
+Record        Purpose
+Users/accounts        Identity, login identifier, password hash, account status
+Sessions        Logged-in devices, expiry aur revocation
+Roles/permissions        Allowed actions
+Invitations/verification records        Activation aur password-reset flow
+Member-account link        Login ko correct gym member se connect karna
+Trainer assignments        Trainer ke allowed members
+Audit log        Account create, role change, suspension aur reset kisne kiya
+
+
+
+
+Auth library ke supported tables use karenge; gym-specific records Aiven PostgreSQL mein unse link honge. Passwords aur activation secrets logs mein nahi likhenge.
+Implementation ka order yeh rahega:
+1. Auth tables + initial owner setup.
+2. Login, session validation aur logout.
+3. Backend permission checks.
+4. Staff invitation aur activation.
+5. Member account linking aur activation.
+6. Password reset, suspension aur session revocation.
+7. Verify: receptionist owner actions na kar sake, trainer unassigned members na dekh sake, aur member kisi doosre member ka record access na kar sake.
+
+
+1. Collection dashboard par kya dikhega?
+Owner login kare → Dashboard → Collection section.
+Card        Kya dikhayega?
+Today’s collection        Aaj ki confirmed cash + bank payments
+Cash received        Selected period mein cash receive hua
+Bank/account received        Selected period mein verified transfers
+Refunds        Selected period mein actually wapas diya gaya paisa
+Net collection        Received payments − refunds
+Pending transfers        Verification ka wait karne wale proofs; collection se separate
+
+
+
+
+Example:
+Aaj ka hisaab        Amount
+Cash received        Rs. 12,000
+Verified transfers        Rs. 8,000
+Total received        Rs. 20,000
+Refunds        Rs. 2,000
+Net collection        Rs. 18,000
+
+
+
+
+Expenses alag section mein rahenge. Net collection ko profit nahi kahenge—rent, salaries aur doosre expenses abhi subtract nahi hue.
+2. Cash payment se collection update hone ka flow
+Member cash de → receptionist member/invoice select kare → amount enter kare → confirm → receipt → dashboard update.
+Example: Ahmed ki invoice Rs. 3,000 ki hai, woh Rs. 2,000 cash deta hai.
+1. Receptionist Ahmed ka profile open karega.
+2. Outstanding invoice select karega.
+3. “Record Payment” click karega.
+4. Rs. 2,000, method Cash, aur actual payment date enter karega.
+5. Confirmation screen par member, amount aur invoice check karega.
+6. Backend payment aur invoice allocation ek database transaction mein save karega.
+7. Unique receipt generate hogi.
+8. Ahmed ke dues Rs. 1,000 reh jayenge.
+9. Cash collection Rs. 2,000 badhegi.
+Partial payment mein sirf received amount collection mein aayega, poori invoice amount nahi.
+3. Bank/account transfer ka flow
+Transfer do tareeqon se record ho sakega:
+Situation        Flow
+Member app se proof bheje        Proof submit → pending → staff account mein paisa check kare → approve/reject
+Member reception par transfer kare        Staff account mein receipt verify kare → direct confirmed payment record kare
+
+
+
+
+Member ka proof submit hote hi:
+- Pending list mein entry aayegi.
+- Invoice ke dues unchanged rahenge.
+- Collection unchanged rahegi.
+- Confirmed receipt issue nahi hogi.
+Staff actual transfer verify karega, phir “Confirm Payment” karega. Tab payment save, dues update aur receipt issue hogi.
+Reject karne par reason save hoga aur member ko dikhega. Sirf screenshot dekh kar automatic payment confirm nahi karenge.
+4. Payment entry mein kaunsi information hogi?
+Field        Purpose
+Member        Paisa kis member se aaya
+Invoice allocation        Kis fee/balance ke against payment adjust hui
+Amount        Actual received amount
+Method        Cash ya account transfer
+Receiving account        Bank, Easypaisa/JazzCash ya configured gym account
+Payment date/time        Paisa actually kab receive hua
+Reference        Transfer transaction/reference number
+Recorded by        Entry kis staff ne ki
+Recorded at        Software mein entry kab hui
+Verified by/at        Transfer kisne aur kab verify kiya
+Receipt number        Payment ki unique receipt
+Note        Zaroori explanation
+
+
+
+
+Payment date aur entry date separate hongi. Kal receive hua paisa aaj enter karo toh kal ki collection mein dikhega; audit mein aaj ki entry visible hogi. Purani dates ki entries sirf authorized staff kar sakega aur reason required hoga.
+5. Dashboard ka date filter
+Filter        Result
+Today        Aaj ki collection
+Yesterday        Kal ki collection
+This week        Current week
+This month        Current month
+Custom range        Selected start/end dates
+
+
+
+
+Dates Asia/Karachi timezone ke mutabiq calculate hongi.
+Late verification ka example: transfer Monday ko receive hua, Tuesday ko confirm hua → Monday ki collection update hogi. Tuesday ka audit verification dikhayega.
+6. Collection details open karne ka flow
+Collection card click → payments list → filters → payment detail.
+List mein yeh columns honge:
+Receipt        Member        Payment date        Method        Received        Staff
+RCP-000125        Ahmed        5 Oct        Cash        Rs. 2,000        Ali
+RCP-000126        Sara        5 Oct        Bank        Rs. 3,000        Ali
+
+
+
+
+Filters:
+- Member name/ID ya receipt number.
+- Cash/account transfer.
+- Receiving account.
+- Staff.
+- Date range.
+Payment open karne par invoice allocation, receipt, verification aur correction history dikhegi. Owner filtered list export bhi kar sakega.
+7. Duplicate payment kaise prevent hogi?
+Double-click, slow internet ya retry se collection double nahi honi chahiye.
+Problem        Backend handling
+Same submit request dobara aaye        Same request key par existing payment return; nayi entry nahi
+Do staff same pending transfer approve karein        Sirf ek confirmation successful
+Same transfer reference dobara enter ho        Receiving account ke saath duplicate check
+Do payments ek invoice par simultaneously aayein        Transaction/locking se remaining balance safely check
+
+
+
+
+Har valid payment ki unique identity hogi. Ek payment multiple invoices mein allocate ho toh collection mein woh payment ek baar count hogi.
+8. Galat entry aur refund ka flow
+Dono situations separate rahengi:
+Situation        Action        Collection par effect
+Rs. 2,000 receive hue, Rs. 20,000 enter ho gaye        Owner reason ke saath entry reverse kare → correct Rs. 2,000 entry        Original period ka incorrect collection correct hoga
+Valid payment ka Rs. 1,000 member ko wapas diya        Owner refund record kare        Refund date ki net collection Rs. 1,000 kam hogi
+Pending transfer reject hua        Rejection reason        Collection par koi effect nahi
+
+
+
+
+Original entry permanently delete nahi hogi. Correction aur refund original payment se linked rahenge.
+Refund ke waqt invoice/dues ka treatment bhi explicitly select hoga: fee obligation cancel hui hai ya paisa wapas dene ke bawajood fee due hai? System isko silently decide nahi karega.
+9. Receptionist aur owner kya dekhenge?
+Role        Collection access
+Owner        Gym ki full collection, filters, exports, refunds aur corrections
+Receptionist        Payment entries, receipts aur apni daily collection summary; gym-wide financial report default nahi
+Trainer        Collection access nahi
+Member        Sirf apni payments aur receipts
+
+
+
+
+Har access backend permissions se enforce hoga.
+10. Day-end cash checking
+Receptionist apni shift ke end par “Close Cash Session” open karega:
+1. System shift ki expected cash collection dikhayega.
+2. Receptionist actual counted cash enter karega.
+3. Difference ho toh reason likhega.
+4. Owner review karega.
+5. Cash handover record save hoga.
+Example: expected Rs. 12,000, counted Rs. 11,500 → Rs. 500 shortage flag hogi. Collection records ko shortage cover karne ke liye change nahi karenge.
+Opening cash, cash refunds, cash expenses aur owner ko handover drawer balance mein separately track honge. Cash collection aur drawer mein maujood cash alag totals hain.
+11. Backend mein kaise implement karenge?
+Record        Kaam
+Payments        Confirmed received money
+Payment allocations        Payment kis invoice/dues ke against lagi
+Transfer submissions        Pending/rejected/approved proofs
+Refunds/reversals        Money return aur entry corrections
+Receiving accounts        Gym ke bank/wallet accounts
+Cash sessions        Shift cash checking aur handover
+Audit history        Kisne kya confirm/correct kiya
+
+
+
+
+Dashboard backend confirmed valid payments ka total calculate karega. Frontend manually total add karke permanent balance maintain nahi karega.
+Payment save hone ke baad dashboard refresh hoga. Email ya receipt delivery fail ho toh saved payment valid rahegi, delivery retry hogi.
+12. Implementation ka order
+1. Confirmed cash payment → receipt → collection total.
+2. Transfer submission → verification → collection update.
+3. Partial payments aur invoice allocations.
+4. Date/method/staff filters aur detailed list.
+5. Duplicate prevention, corrections aur refunds.
+6. Cash session closing aur export.
+Verification mein check karenge: pending proof count na ho, partial amount sahi count ho, retry se duplicate na bane, aur refunds/corrections sahi period mein reflect hon.
+
+
+1. Members section mein kya dikhega?
+Owner/Receptionist login → Members → members list.
+Column
+	Kya dikhega?
+	Member ID
+	Example: OXG-000125
+	Name + photo
+	Member ki pehchan
+	Phone
+	Contact number
+	Membership
+	Current plan aur validity status
+	Outstanding dues
+	Kitni fee baqi hai
+	Assigned trainer
+	Trainer ka naam, agar assigned ho
+	App access
+	Not activated / Active / Suspended
+	Action
+	View profile / Edit
+	Upar Add Member, search aur filters honge. List pagination se load hogi; poora database ek saath download nahi karenge.
+2. Naya member add karne ka flow
+Add Member → personal details → duplicate check → save → unique ID → profile.
+Form mein yeh fields rakhenge:
+Field
+	Required?
+	Purpose
+	Full name
+	Haan
+	Member ka naam
+	Phone number
+	Haan
+	Contact aur duplicate checking
+	Email
+	Optional
+	Account activation aur emails
+	Photo
+	Optional
+	Reception par identification
+	Joining date
+	Haan
+	Gym join karne ki date
+	Date of birth
+	Optional
+	Age aur coaching context
+	Address
+	Optional
+	Contact details
+	Emergency contact name + phone
+	Optional
+	Emergency mein contact
+	Fitness goal
+	Optional
+	Weight loss, muscle gain, general fitness
+	Relevant limitations/injuries
+	Optional
+	Member ki di hui coaching information
+	Staff note
+	Optional
+	Internal operational note
+	CNIC starting version mein required nahi rakhenge. Photo na ho toh initials/avatar show hoga.
+3. Duplicate member kaise check hoga?
+Staff phone/email enter kare → system existing matches check kare.
+Situation
+	App ka behavior
+	Same phone par existing member
+	Existing profile dikhaye; staff pehle check kare
+	Same name, different phone
+	Possible match warning; automatically block nahi
+	Family members ka same phone
+	Authorized staff reason dekar separate member bana sake
+	Email kisi login account se linked hai
+	Us email par doosra login silently create nahi hoga
+	Phone number consistent format mein save karenge, taake 03… aur +923… ko alag numbers na samjhe.
+Returning member ke liye purana profile use hoga, naya duplicate record nahi. Uski membership renew/reactivate karenge.
+4. Unique Member ID kaise banegi?
+Save successful hone par backend ID generate karega:
+OXG-000001 → OXG-000002 → OXG-000003
+* Staff manually ID type nahi karega.
+* Do staff ek waqt member add karein toh bhi IDs unique hongi.
+* Member archive hone ke baad uski ID reuse nahi hogi.
+* Name, phone ya plan change hone se Member ID nahi badlegi.
+* Login activate na ho tab bhi Member ID mil jayegi.
+Database ka internal identifier alag hoga; visible Member ID search, receipts aur reception ke liye hogi.
+5. Save karne ke baad kya hoga?
+Member create hote hi profile open hogi. Staff ko next actions milenge:
+Action
+	Result
+	Assign Membership
+	Plan aur start/end dates configure
+	Record Payment
+	Invoice ke against received payment enter
+	Activate App Access
+	Member ka login activation flow
+	Assign Trainer
+	Trainer ko member assign
+	Complete Later
+	Sirf member record save; baqi setup baad mein
+	Member add karte hi automatically paid ya active membership mark nahi hoga. Membership aur payment apne records se determine hongi.
+Example: Ahmed ka profile save hua, lekin plan assign nahi hua → profile par “No membership assigned” dikhega.
+6. Member profile ka structure
+Profile ke top par photo, name, Member ID, phone aur current membership summary hogi.
+Tab
+	Kya hoga?
+	Overview
+	Basic details, plan, expiry, dues aur trainer summary
+	Personal Details
+	Contact, emergency contact aur joining information
+	Memberships
+	Current aur previous plans, renewals, freezes
+	Invoices & Payments
+	Invoices, dues, confirmed payments aur receipts
+	Training
+	Assigned trainer, workout/diet plans
+	Progress
+	Weight, measurements aur permitted progress photos
+	Activity
+	Member ki permission ke mutabiq synced summaries
+	Attendance
+	Feature enabled ho toh attendance history
+	App Access
+	Activation status, suspend/reset actions
+	History
+	Profile changes aur important actions
+	Har role ko sirf allowed tabs aur fields milenge. Receptionist ko private progress photos ya fitness activity default access nahi milega.
+7. Details edit karne ka flow
+Profile → Edit Details → changes → validation → Save → history update.
+Staff name, contact, address aur emergency contact update kar sakega. System record karega:
+* Kis staff ne edit kiya.
+* Kab edit hua.
+* Kaunse fields change hue.
+Login email change karna ordinary contact edit se separate hoga. Nayi login email verify karni hogi; sirf profile field edit se account ki identity change nahi hogi.
+Profile edit karne se purani invoices aur issued receipts ki stored details automatically rewrite nahi hongi.
+8. Existing gym members kaise add honge?
+Add Existing Member → details → original joining date → current membership → opening dues.
+Example:
+Detail
+	Entry
+	Member
+	Bilal
+	Original joining date
+	1 August
+	Current membership validity
+	1–31 October
+	Purani outstanding fee
+	Rs. 1,500
+	Rs. 1,500 ko opening dues record ke taur par save karenge. Woh collection nahi hogi, kyunki abhi paisa receive nahi hua.
+Purani paid fees ke records available na hon toh fake payments ya receipts generate nahi karenge.
+9. Member status kaise work karega?
+Teen statuses separate rahenge:
+Status type
+	Examples
+	Meaning
+	Member record
+	Current / Archived
+	Gym ki operational list mein member hai ya archive
+	Membership
+	None / Upcoming / Active / Expired / Frozen / Cancelled
+	Gym subscription ki validity
+	App access
+	Not activated / Active / Suspended
+	Login use kar sakta hai ya nahi
+	Isse confusion nahi hogi: membership expire hone par profile preserve rahegi, aur member apni dues/receipts dekh sakega jab tak app access suspended na ho.
+10. Member gym chhor de toh?
+Profile → Archive Member → reason → confirm.
+Archive hone par:
+* Default current-members list se hide hoga.
+* Payments, invoices aur history preserve rahengi.
+* Outstanding dues reports mein uska balance phir bhi include hoga.
+* Future coaching assignments/reminders stop honge; dues follow-up settings ke mutabiq rahega.
+* App access suspend karne ka separate option hoga.
+Wapas aaye toh Unarchive → membership assign/renew karenge. Purani Member ID aur history wahi rahengi.
+Financial history wale member ko normal Delete button se permanently remove nahi karenge.
+11. Kaun kya manage karega?
+Action
+	Owner
+	Receptionist
+	Trainer
+	Member
+	Member add
+	✅
+	✅
+	—
+	—
+	Operational details edit
+	✅
+	✅
+	—
+	Apne allowed fields
+	Member archive/unarchive
+	✅
+	—
+	—
+	—
+	Membership/payment summary
+	✅
+	✅
+	—
+	Apni
+	Fitness goals/progress
+	Permission ke mutabiq
+	—
+	Assigned + permitted members
+	Apna
+	Trainer assign/change
+	✅
+	—
+	—
+	—
+	App access activate
+	✅
+	✅
+	—
+	Activation complete
+	Member data export
+	✅
+	—
+	—
+	—
+	Backend record-level access check karega: URL mein doosre member ka ID daalne se uska data accessible nahi hoga.
+12. Backend implementation ka flow
+Member create request par backend:
+1. Staff session aur member-create permission verify karega.
+2. Fields validate aur phone/email normalize karega.
+3. Duplicate candidates check karega.
+4. Unique Member ID generate karke profile save karega.
+5. Audit entry save karega.
+6. Saved profile frontend ko return karega.
+Photos Cloudinary par controlled upload se jayengi; database mein image reference save hoga. Private health notes aur progress images ka access separately restrict hoga.
+Double-click/retry se ek hi submission ke do member records nahi banne chahiye. Save fail ho toh form ki entered details preserve rahengi aur retry available hoga.
+
+
+1. Fee Plans screen par kya hoga?
+Owner login → Fee Plans → plans list.
+Plan
+	Duration
+	Fee — example
+	Status
+	Regular Monthly
+	1 calendar month
+	Rs. 3,000
+	Active
+	Student Monthly
+	1 calendar month
+	Rs. 2,500
+	Active
+	Quarterly
+	3 calendar months
+	Rs. 8,000
+	Active
+	Yearly
+	12 calendar months
+	Rs. 30,000
+	Active
+	Custom Short Pass
+	15 days
+	Rs. 1,800
+	Inactive
+	Prices examples hain. Owner Add Plan, Edit, Activate/Deactivate kar sakega.
+2. Naya plan create karne ka flow
+Add Plan → name → duration → fee → included services → payment terms → preview → save.
+Field
+	Kya set hoga?
+	Plan name
+	Regular Monthly, Student, etc.
+	Description
+	Package ki short explanation
+	Duration value + unit
+	15 days, 1 month, 3 months, 1 year
+	Membership fee
+	Package ki total price
+	Admission fee
+	Joining par applicable one-time fee
+	Included services
+	Gym access, workout guidance, personal training, etc.
+	Eligibility
+	Everyone, students ya defined category
+	Payment terms
+	Full payment ya installments allowed
+	Status
+	Active ya inactive
+	Starting version mein currency PKR hogi. Services mention karne se trainer automatically assign nahi hoga; assignment separate action rahegi.
+3. Duration kaise calculate hogi?
+Calendar month aur fixed days ko separate options rakhenge, taake “monthly” ka meaning clear ho.
+Selected duration
+	Start date
+	Validity
+	30 days
+	5 October
+	5 October–3 November
+	1 calendar month
+	5 October
+	5 October–4 November
+	3 calendar months
+	5 October
+	5 October–4 January
+	1 calendar month
+	1 October
+	1–31 October
+	Displayed end date last valid day hogi. Calendar-month calculation mein same date next month unavailable ho toh next month ki last date boundary use karenge; save karne se pehle exact validity preview dikhegi.
+Dates Asia/Karachi ke mutabiq handle hongi.
+4. Member ko plan assign karne ka flow
+Member profile → Assign Membership → active plan select → start date → fee preview → confirm.
+Staff ko preview mein dikhega:
+Item
+	Example
+	Monthly membership
+	Rs. 3,000
+	Admission fee — applicable ho toh
+	Rs. 1,000
+	Approved discount
+	−Rs. 500
+	Total payable
+	Rs. 3,500
+	Confirm karne par:
+1. Member ki membership create hogi.
+2. Plan name, duration, price aur included services ki copy us membership mein save hogi.
+3. Invoice create hogi.
+4. Payment receive hui ho toh staff record karega.
+5. Warna invoice unpaid rahegi.
+Plan assign karna payment receive karna nahi hai. Collection sirf confirmed payment se badhegi.
+5. Admission fee kaise work karegi?
+Default rule: first joining par admission fee; ordinary renewal par dobara nahi.
+Situation
+	Behavior
+	Naya member join kare
+	Configured admission fee apply
+	Monthly renewal
+	Admission fee repeat nahi
+	Existing member import ho
+	Staff record kare ke pehle charge ho chuki hai ya nahi
+	Gym rejoining fee lena chahe
+	Owner explicitly approve kare; separate charge visible ho
+	Admission fee invoice mein separate line hogi. Har plan assignment par silently repeat nahi hogi.
+6. Full payment aur installments
+Membership ki duration aur payment schedule alag honge.
+Example: Quarterly plan ki total fee Rs. 8,000 hai.
+Payment term
+	Schedule
+	Full payment
+	Rs. 8,000 agreed due date par
+	Installments
+	Rs. 3,000 + Rs. 2,500 + Rs. 2,500, har installment ki due date
+	System ek total invoice ke saath installment schedule rakhega. Installments ka sum final payable amount ke barabar hona chahiye.
+Agar member Rs. 3,000 pay kare:
+* Collection Rs. 3,000 badhegi.
+* Total outstanding Rs. 5,000 hoga.
+* Agli installment ki due date dikhegi.
+* Rs. 5,000 outstanding hone ka matlab poora amount overdue nahi: overdue sirf due ho chuka unpaid amount hoga.
+Installment receive hone se membership dates automatically extend nahi hongi.
+7. Discount ka flow
+Plan ki standard price → authorized discount → final invoice amount.
+Discount type
+	Example
+	Fixed amount
+	Rs. 500 off
+	Percentage
+	Membership fee par 10% off
+	Starting rule: percentage discount membership fee par lagega; admission fee discount separately approve hoga.
+Receptionist standard plan assign karega. Custom discount owner approve karega. Discount reason, amount aur approving person save honge; final payable negative nahi ho sakta.
+Student plan ki Rs. 2,500 price uski standard price hogi—usse automatically extra discount nahi samjhenge.
+8. Plan ki price change ho toh?
+Example: Regular Monthly Rs. 3,000 se Rs. 3,500 ho gaya.
+Record
+	Effect
+	Already issued invoice
+	Purani amount same
+	Existing membership
+	Agreed price/services same
+	New assignment
+	Updated price
+	Future renewal
+	Current price preview; staff confirm karega
+	Plan edit par new version save karenge. Member ke purane agreement ko current plan se overwrite nahi karenge.
+9. Renewal mein plan kaise use hoga?
+Member profile → Renew → previous/current plan select → next validity → current fee preview → confirm → new invoice.
+Default next period previous membership ke end ke agle din start hoga. Gap ke baad returning member ke liye staff new start date choose kar sakega.
+Renewal confirm hone par naya membership period banega; old history preserve rahegi. Starting version mein automatic bank deduction ya automatic renewal nahi hoga.
+10. Member beech mein plan change kare toh?
+Example: Monthly se Quarterly par jana chahta hai.
+Option
+	Behavior
+	Next renewal se change
+	Current membership same; next period new plan
+	Immediately change
+	Owner unused period, credit/extra charge aur new dates explicitly review kare
+	Pehle release mein next renewal se change standard flow rakhenge. Immediate switch owner-controlled adjustment hoga; software bina approval refund ya proportional credit calculate karke apply nahi karega.
+11. Plan deactivate/delete karne ka flow
+Owner → Plan → Deactivate → confirm.
+* New assignments ke dropdown se hide hoga.
+* Existing memberships aur invoices valid rahengi.
+* Renewal ke liye doosra active plan select karna hoga.
+* Owner baad mein reactivate kar sakega.
+* Used plan permanently delete nahi hoga.
+* Unused draft plan delete ho sakega.
+12. Permissions
+Action
+	Owner
+	Receptionist
+	Trainer
+	Member
+	Plan create/edit/deactivate
+	✅
+	—
+	—
+	—
+	Active plans view
+	✅
+	✅
+	Relevant services
+	Available published plans
+	Member ko plan assign/renew
+	✅
+	✅
+	—
+	Request only
+	Custom price/discount approve
+	✅
+	—
+	—
+	—
+	Apna selected plan view
+	✅
+	✅
+	Assigned member ki relevant details
+	✅
+	13. Backend ka implementation
+Record
+	Purpose
+	Fee plans + versions
+	Package definitions aur changes
+	Memberships
+	Member ka selected package aur validity
+	Membership price/service snapshot
+	Assignment ke waqt agreed terms
+	Invoice + line items
+	Membership fee, admission fee, discount
+	Installment schedule
+	Amounts aur due dates
+	Audit history
+	Kisne plan/price/terms change kiye
+	Backend duration, amounts aur permissions validate karega. Membership, invoice aur installment schedule ek database transaction mein save honge, taake aadha setup save na ho. Double-click/retry se duplicate membership/invoice prevent karenge.
+Pehla working example: owner Regular Monthly — 1 month — Rs. 3,000 banaye → receptionist Ahmed ko 5 October se assign kare → validity 5 October–4 November dikhe → invoice bane → payment record hone par receipt aur collection update ho.
+1. Multiple fee plans — gym ke packages banana
+Fee plan ek reusable package hoga. Owner package banayega; receptionist usko members par apply karega.
+Plan
+	Duration
+	Example price
+	Regular Monthly
+	1 calendar month
+	Rs. 3,000
+	Student Monthly
+	1 calendar month
+	Rs. 2,500
+	Quarterly
+	3 calendar months
+	Rs. 8,000
+	Yearly
+	12 calendar months
+	Rs. 30,000
+	Short Pass
+	15 days
+	Rs. 1,800
+	Create flow: Owner → Fee Plans → Add Plan → details → preview → Save.
+Form mein:
+Field
+	Kaam
+	Name
+	Package ka naam
+	Duration
+	Number + days/months/years
+	Membership price
+	Poore package ki fee
+	Admission fee
+	First joining ka configured charge
+	Included services
+	Gym access, training guidance, etc.
+	Eligibility
+	Regular/student/custom category
+	Payment terms
+	Full payment ya installments
+	Status
+	Active/inactive
+	Duration aur installments separate rahenge. Three-month membership ka payment ek saath bhi ho sakta hai aur agreed installments mein bhi.
+Plan price change karne par existing invoices aur membership agreements same rahenge. New assignments/renewals par updated price preview hogi.
+Used plan deactivate ho sakega; uski previous history delete nahi hogi.
+2. Membership + renewal — member ko valid gym access dena
+Membership batayegi: kis member ka kaunsa package, kis date se kis date tak valid hai.
+Assignment flow:
+1. Receptionist member profile open kare.
+2. Assign Membership select kare.
+3. Active fee plan choose kare.
+4. Start date select kare.
+5. System exact end date aur charges preview kare.
+6. Admission fee/approved discount check kare.
+7. Confirm karne par membership aur invoice create hon.
+Example:
+Detail
+	Value
+	Member
+	Ahmed — OXG-000125
+	Plan
+	Regular Monthly
+	Start
+	5 October
+	Last valid day
+	4 November
+	Membership fee
+	Rs. 3,000
+	Fixed 30 days aur 1 calendar month alag duration options honge. Month-end/leap-year rules consistent honge, aur final dates confirmation screen par clearly dikhenगी.
+Membership status
+	Meaning
+	Upcoming
+	Start date abhi nahi aayi
+	Active
+	Validity chal rahi hai
+	Expired
+	Last valid day guzar gaya
+	Frozen
+	Approved temporary pause
+	Cancelled
+	Membership early close kar di
+	Payment aur membership status separate hain. Starting rule: confirmed dates par membership chalegi; unpaid dues apne section mein rahenge. Payment pending hone se membership automatically cancel nahi hogi.
+Renewal flow:
+Expiry reminder → member profile → Renew → plan/date/price preview → confirm → new membership period + new invoice.
+Situation
+	Start date
+	Expiry se pehle renewal
+	Current membership ke end ke agle din
+	Expiry ke baad, continuity maintain karni ho
+	Previous end ke agle din, explicitly confirm
+	Gap ke baad dobara join kare
+	Staff selected rejoining date
+	Advance renewal mein future period Upcoming hoga. Same gym-access membership ke overlapping periods backend block karega.
+Freeze flow:
+Member request → owner approve → freeze start + resume date + reason → expiry adjustment preview → confirm.
+Example: membership 4 November tak thi; approved freeze 15–21 October, resume 22 October → seven days extend karke expiry 11 November.
+* Freeze sirf eligible active membership par.
+* Overlapping freeze periods allowed nahi.
+* Resume early ho toh actual frozen days ke mutabiq adjustment.
+* Future renewal already booked ho toh uski dates bhi review/adjust hongi.
+* Freeze se invoice, installments ya payment automatically change nahi honge.
+Cancellation flow:
+Owner → Cancel Membership → effective date + reason → financial treatment review → confirm.
+Cancellation ka matlab automatically refund ya dues removal nahi. Owner decide karega ke unused fee ka credit/refund dena hai ya outstanding charge waive karna hai; separate adjustment record banega.
+3. Invoices + dues — member se kitna paisa lena hai
+Invoice fee ka bill hai; receipt received payment ka proof hai.
+Membership assignment/renewal par invoice generate hogi:
+Invoice line
+	Example
+	Monthly fee
+	Rs. 3,000
+	Admission fee
+	Rs. 1,000
+	Approved discount
+	−Rs. 500
+	Total payable
+	Rs. 3,500
+	Invoice mein unique number, member, membership period, issue date, due date, line items aur remaining balance honge.
+Flow: Charges preview → invoice issue → payment allocate → remaining amount update.
+Payment status
+	Condition
+	Unpaid
+	Koi confirmed payment allocate nahi hui
+	Partially paid
+	Kuch payment hui; balance baqi
+	Paid
+	Balance zero
+	Void
+	Authorized cancellation; history preserved
+	Overdue alag flag hoga: due date guzar gayi aur due amount unpaid hai. Partially paid invoice bhi overdue ho sakti hai.
+Calculation:
+Remaining balance = final invoice amount − valid allocated payments − approved credit adjustments.
+Installment plan ho toh dashboard dono amounts dikhayega:
+Amount
+	Meaning
+	Total outstanding
+	Poora remaining balance
+	Due now
+	Ab tak payable unpaid amount
+	Overdue
+	Due date cross kar chuka unpaid amount
+	Upcoming
+	Future installment dates ka amount
+	Issued invoice silently edit nahi hogi. Correction ke liye linked adjustment/credit record banega. Paid invoice ko void karne se pehle uski payments ka refund/reallocation handle karna hoga.
+4. Manual payments — cash aur transfers record karna
+Online payment gateway abhi nahi hoga.
+Cash flow:
+Member cash de → staff member/invoice choose kare → amount + date enter kare → confirmation → payment save → receipt.
+Transfer flow:
+Member reference/proof submit kare → Pending Verification → staff gym ke receiving account mein actual credit check kare → approve/reject.
+Stage
+	Dues
+	Collection
+	Receipt
+	Transfer proof pending
+	Same
+	No increase
+	Confirmed receipt nahi
+	Transfer confirmed
+	Allocated amount se reduce
+	Increase
+	Issue
+	Transfer rejected
+	Same
+	No increase
+	Issue nahi
+	Payment form:
+Field
+	Requirement
+	Member
+	Required
+	Amount
+	Positive amount
+	Method
+	Cash/account transfer
+	Actual payment date
+	Required
+	Receiving account
+	Transfer ke liye
+	Transaction reference
+	Transfer verification ke liye
+	Invoice allocation
+	Amount kis bill ke against adjust hoga
+	Note/proof
+	Zaroorat ke mutabiq
+	Staff/verification details
+	System automatically record karega
+	Backend amount aur allocations validate karega. Payment, allocation aur receipt identity ek transaction mein save hongi.
+Double-click/retry se duplicate payment nahi banegi. Same pending transfer do staff ek waqt approve karein toh ek hi payment create hogi.
+Galat entry: owner reason ke saath reverse kare → corrected entry banaye.
+Actual money return: linked refund record bane.
+Dono actions ki history preserve hogi. Email fail hone se confirmed payment undo nahi hogi.
+5. Partial payments + opening dues — installments aur purana balance
+Partial payment ke liye separate member ya duplicate invoice nahi banegi.
+Example:
+Action
+	Total payable
+	Received so far
+	Remaining
+	Invoice issue
+	Rs. 3,500
+	Rs. 0
+	Rs. 3,500
+	First payment
+	Rs. 3,500
+	Rs. 2,000
+	Rs. 1,500
+	Second payment
+	Rs. 3,500
+	Rs. 3,000
+	Rs. 500
+	Final payment
+	Rs. 3,500
+	Rs. 3,500
+	Rs. 0
+	Har payment ki apni receipt hogi. Final payment ke baad invoice Paid hogi.
+Multiple invoices hon toh allocation preview milega. Default oldest due invoice pehle; staff confirm/change kar sakega.
+Example: old dues Rs. 1,500 + current fee Rs. 3,000; member Rs. 2,000 deta hai:
+Allocation
+	Amount
+	Old dues clear
+	Rs. 1,500
+	Current invoice payment
+	Rs. 500
+	Current remaining dues
+	Rs. 2,500
+	Collection mein received Rs. 2,000 ek baar count honge.
+Opening dues flow:
+Existing member add/import → opening balance amount → balance-as-of date + note → owner confirm → opening balance record.
+* Opening dues collection nahi hongi.
+* Purane membership charges dobara invoice karke double dues nahi banayenge.
+* Baad mein payment isi opening balance par allocate ho sakegi.
+* Opening balance correction owner audit ke saath karega.
+Overpayment: outstanding Rs. 1,000 hai aur member Rs. 1,500 deta hai → system warning dega. Staff confirm kare toh Rs. 1,000 invoice par aur Rs. 500 member advance credit mein save hoga. Negative dues nahi banenge.
+Advance next invoice mein apply ho toh collection dobara increase nahi hogi—paisa pehle receive ho chuka hai.
+6. Admission fee + discounts — final payable calculate karna
+Admission fee first joining ka separate charge hoga. Normal renewal par repeat nahi hogi.
+Situation
+	Default behavior
+	First joining
+	Configured admission fee
+	Ordinary renewal
+	No admission fee
+	Imported existing member
+	Pehle charge hui thi ya nahi record karein
+	Rejoining charge
+	Owner explicitly approve kare
+	Discount flow: staff request → owner approval → invoice preview → issue.
+Type
+	Example
+	Fixed discount
+	Rs. 500 off
+	Percentage
+	Membership fee par 10% off
+	Admission fee waiver
+	Owner admission charge partially/fully waive kare
+	Starting rule: percentage discount membership fee par lagega. Admission fee waiver separate approval hogi; automatic discount stacking nahi hogi.
+Example:
+Calculation
+	Amount
+	Membership fee
+	Rs. 3,000
+	10% membership discount
+	−Rs. 300
+	Admission fee
+	Rs. 1,000
+	Admission waiver
+	−Rs. 500
+	Final payable
+	Rs. 3,200
+	Discount amount, applicable charge, reason aur approving owner save honge. Discount collection nahi hai; woh payable amount reduce karta hai. Invoice issue hone ke baad discount dena ho toh credit adjustment use hoga.
+7. In sab mein permissions
+Action
+	Owner
+	Receptionist
+	Member
+	Fee plans create/change
+	✅
+	—
+	—
+	Standard membership assign/renew
+	✅
+	✅
+	Request only
+	Freeze/cancel approve
+	✅
+	Request submit
+	Request submit
+	Invoice create through approved flow
+	✅
+	✅
+	Apni dekhe
+	Cash/transfer confirm
+	✅
+	✅
+	Proof submit
+	Custom discount/opening dues approve
+	✅
+	—
+	—
+	Reverse/refund/financial adjustment
+	✅
+	—
+	—
+	Payments/receipts view
+	All
+	Operational access
+	Apni only
+	Trainer financial actions nahi karega.
+8. Backend mein implementation ka order
+1. Fee plans: prices, duration, versions, active/inactive.
+2. Memberships: assignment, dates, overlap checking aur renewal.
+3. Invoices: line items, discounts, due dates aur installments.
+4. Payments: cash, pending transfers, confirmation aur allocations.
+5. Balances: partial payments, opening dues aur advance credit.
+6. Adjustments: freezes, cancellation, credits, reversal aur refunds.
+Money exact decimal ya integer paisa mein store karenge. Backend har amount recalculate karega; frontend se bheji hui final price par blindly trust nahi karega.
+Complete example:
+Ahmed joins → Monthly Rs. 3,000 + admission Rs. 1,000 − approved discount Rs. 500 → invoice Rs. 3,500 → membership dates confirm → Rs. 2,000 cash record → receipt Rs. 2,000 → Rs. 1,500 dues → baad mein transfer proof → staff verifies → remaining payment receipt → invoice Paid.
+
+
+Bhai, ab “Receipts” aur “Expenses” ka complete flow dekhte hain. Receipt member se receive hue paisay ka proof hogi; Expenses gym se kharch hue paisay ka record hoga.
+10. Receipts — confirmed payment ka proof
+Payment confirm → unique receipt generate → member profile mein save → print/download/share.
+1. Receipt kab banegi?
+Situation
+	Receipt
+	Cash payment staff confirm kare
+	Generate hogi
+	Bank/account transfer verify ho
+	Generate hogi
+	Transfer screenshot pending ho
+	Confirmed receipt nahi banegi
+	Sirf invoice issue hui ho
+	Receipt nahi banegi
+	Partial payment confirm ho
+	Sirf received amount ki receipt
+	Example: invoice Rs. 3,000, member Rs. 2,000 deta hai → receipt Rs. 2,000 ki aur remaining dues Rs. 1,000.
+2. Receipt mein kya likha hoga?
+Information
+	Example
+	Gym name/logo/contact
+	OXGEN GYM
+	Receipt number
+	OXG-RCP-000125
+	Member name + ID
+	Ahmed — OXG-000045
+	Payment received date
+	5 October, 11:30 AM
+	Receipt issued date
+	Agar entry baad mein hui toh separate
+	Payment method
+	Cash / Bank / Wallet transfer
+	Received amount
+	Rs. 2,000
+	Allocation
+	Monthly invoice INV-000080 ke against
+	Invoice balance after payment
+	Rs. 1,000
+	Received/verified by
+	Staff name
+	Transaction reference
+	Transfer ho toh
+	Footer
+	Gym ka configured receipt message
+	Membership period applicable ho toh dikhega. Bank account number aur member contact details unnecessarily full print nahi karenge.
+Receipt par balance “payment ke waqt” ka snapshot hoga. Baad ki payment se purani receipt rewrite nahi hogi; current dues member profile mein dikhenge.
+3. Receptionist ka flow
+1. Member profile → Record Payment.
+2. Amount, method aur payment date enter.
+3. Details preview → Confirm.
+4. Backend payment save kare aur receipt number assign kare.
+5. Receipt screen open ho.
+6. Staff Print, Download PDF ya Send Email choose kare.
+Payment successfully save ho lekin PDF generation fail ho jaye toh payment valid rahegi. Staff Generate/Download Again kar sakega; naya receipt number nahi banega.
+4. Print aur download options
+Option
+	Behavior
+	A4 PDF
+	Normal printer ke liye
+	Thermal layout
+	80 mm receipt printer ke liye
+	Download
+	Web aur Flutter se PDF
+	Email
+	Tumhara custom branded email flow
+	Share
+	Device share menu; staff/member manually share kare
+	Member app mein Payments → payment detail → Receipt se apni receipt dekh/download kar sakega.
+5. Duplicate aur reprint rules
+* Har confirmed payment ka ek unique receipt number hoga.
+* Retry/double-click se second payment ya receipt nahi banegi.
+* Reprint/download same receipt use karega.
+* Ek payment multiple invoices mein allocate ho toh ek receipt mein allocations ki list hogi.
+* Owner gym logo change kare toh previously issued receipt ka original snapshot preserve rahega.
+6. Correction, reversal aur refund
+Action
+	Receipt behavior
+	Incorrect payment reverse hui
+	Original receipt Reversed mark; reason/history visible
+	Correct payment dobara record hui
+	New payment ki new receipt
+	Actual refund diya
+	Original receipt preserve; separate linked refund acknowledgement
+	Receipt dobara print hui
+	Same number; reversed ho toh clear label
+	Issued receipt ko manually amount edit karke badalne ka option nahi hoga.
+7. Permissions aur backend
+Owner sab receipts access karega; receptionist operational receipts; member sirf apni. Trainer ko access nahi hoga.
+Backend mein payment link, unique receipt number, issued details ka snapshot aur reversal status rahega. PDF backend ke saved record se generate hogi. Receipt URLs/access par authorization check hoga—sirf number guess karke kisi ki receipt download nahi ho sakegi.
+________________
+
+
+11. Expenses — gym ka kharcha record karna
+Owner → Expenses → Add Expense → details → payment status → save → reports update.
+1. Expense categories
+Category
+	Examples
+	Rent
+	Gym building ka kiraya
+	Salaries
+	Receptionist/trainer salary
+	Utilities
+	Electricity, water, internet
+	Equipment
+	Machines, weights, accessories
+	Repairs & maintenance
+	Machine repair/service
+	Cleaning & supplies
+	Cleaning products
+	Marketing
+	Posters, advertising
+	Other
+	Reason ke saath miscellaneous expense
+	Owner categories add/deactivate kar sakega. Used category deactivate karne se previous records preserve rahenge.
+2. Expense form mein kya hoga?
+Field
+	Purpose
+	Title
+	“October rent”
+	Category
+	Rent
+	Payee/vendor
+	Paisa kisko dena hai
+	Total amount
+	Expense ka total
+	Expense date
+	Charge kis date ka hai
+	Due date
+	Agar payment baqi hai
+	Payment status
+	Unpaid / Partially paid / Paid
+	Payment amount/date
+	Actually kitna aur kab pay hua
+	Payment source
+	Cash / configured bank/wallet account
+	Reference
+	Transfer reference, agar ho
+	Bill/photo
+	Optional supporting document
+	Note
+	Explanation
+	Expense record aur expense payment separate honge. Isse unpaid bill ko paid cash outflow nahi samjhenge.
+3. Paid expense ka example
+Owner electricity bill Rs. 12,000 pay karta hai:
+1. Add Expense → Electricity.
+2. Bill amount Rs. 12,000.
+3. Expense date aur optional bill upload.
+4. Paid now select.
+5. Payment Rs. 12,000, date aur bank account enter.
+6. Confirm.
+System expense aur payment save karega. Reports mein:
+* Recorded expense: Rs. 12,000
+* Actual bank outflow: Rs. 12,000
+* Remaining payable: Rs. 0
+4. Unpaid/partial expense ka flow
+Example: machine repair Rs. 10,000; abhi Rs. 4,000 pay hue.
+Detail
+	Amount
+	Total repair expense
+	Rs. 10,000
+	Paid
+	Rs. 4,000
+	Remaining payable
+	Rs. 6,000
+	Baad mein Expense detail → Add Payment → Rs. 6,000 → Confirm.
+Naya Rs. 10,000 expense dobara nahi banega. Existing expense par second payment add hogi; status Paid ho jayega.
+5. Rent aur salaries ke monthly records
+Pehle release mein Copy Previous Expense option rakhenge:
+Previous month ka rent → Copy → new month/date check → save.
+Future mein recurring templates se monthly unpaid expense generate ho sakega. Recurring record generate hona automatically paisa pay hona nahi hoga.
+Salary entry mein employee aur salary month save hoga. Starting version simple salary expense record hoga; payroll deductions/attendance-based salary calculation separate scope hai.
+6. Expenses dashboard aur reports
+Metric
+	Meaning
+	Expenses recorded
+	Selected period ke expense charges
+	Payments made
+	Selected period mein actually paid paisa
+	Outstanding payable
+	Abhi kitna kharcha pay karna baqi hai
+	Overdue payable
+	Due date cross kar chuka unpaid amount
+	Category breakdown
+	Rent, salaries, bills ka comparison
+	Cash/bank breakdown
+	Expense payments kis source se hui
+	Filters: expense date, payment date, category, payee, payment status aur source account.
+Expense date aur payment date ke filters clearly labelled honge. October ka bill November mein pay ho toh expense October mein aur cash outflow November mein dikhega.
+7. Collection ke saath connection
+Example: same period mein:
+Hisaab
+	Amount
+	Confirmed member payments
+	Rs. 100,000
+	Member refunds
+	−Rs. 5,000
+	Expense payments
+	−Rs. 40,000
+	In recorded flows ka net cash movement
+	Rs. 55,000
+	Yeh profit ya bank balance nahi hoga. Opening balance, owner deposits/withdrawals aur doosri movements ke baghair actual available cash calculate nahi kar sakte.
+Cash drawer se expense pay kiya ho toh cash session mein bhi linked outflow aayega. Bank se pay hua expense drawer cash reduce nahi karega.
+8. Galat expense entry kaise correct hogi?
+Situation
+	Action
+	Unpaid expense ki detail wrong
+	Owner edit kare; audit save
+	Paid expense ki amount wrong
+	Linked payment/expense adjustment; silent overwrite nahi
+	Duplicate unpaid expense
+	Owner void kare, reason ke saath
+	Vendor paisa wapas kare
+	Linked vendor refund record
+	Bill attachment wrong
+	Replace/remove; change history record
+	Vendor refund member collection mein count nahi hoga; woh expense-related money return hoga.
+9. Access aur backend
+Starting default: Expenses sirf owner manage karega. Receptionist ko expense permissions owner explicitly de sakega; trainer/member ko access nahi.
+Backend record
+	Kaam
+	Expense categories
+	Kharch ki classification
+	Expenses
+	Charge, payee, dates aur total
+	Expense payments
+	Actual paid amounts aur sources
+	Attachments
+	Bill/document references
+	Adjustments/refunds
+	Corrections aur vendor returns
+	Audit history
+	Kisne entry/change/payment ki
+	Amounts backend validate karega; same submit retry se duplicate expense/payment nahi banegi. Bills aur salary attachments private access ke saath rahengi.
+Pehle receipts ka end-to-end flow banega: payment confirm → same-number receipt → PDF/print. Expenses mein: expense add → partial/full payment → remaining payable → category aur cash/bank report.
+
+
+12. Reports + Export
+Owner → Reports → report type → filters → results → details → export.
+1. Kaunsi reports hongi?
+Report
+	Kya dikhayegi?
+	Collection
+	Confirmed member payments, refunds aur net collection
+	Cash/account breakdown
+	Cash, bank aur wallet ke through received amounts
+	Invoices
+	Issued bills, discounts, adjustments aur remaining balance
+	Outstanding dues
+	Kis member se kitni amount leni baqi hai
+	Overdue dues
+	Due date cross kar chuka unpaid amount
+	Expenses
+	Category-wise recorded expenses
+	Expense payments
+	Actually paid expenses, cash/account breakdown
+	Outstanding payables
+	Vendors/staff ko kitna paisa dena baqi hai
+	Memberships
+	Active, upcoming, frozen aur expired memberships
+	Renewals/expiry
+	Selected period mein renewals aur expire hone wale members
+	Attendance
+	Feature enabled ho toh member visits
+	2. Filters kaise work karenge?
+Report select karne par sirf relevant filters dikhenge.
+Filter
+	Example
+	Date range
+	Today, this month, custom range
+	Payment method
+	Cash / account transfer
+	Receiving/paying account
+	Selected bank ya wallet
+	Member
+	Name ya Member ID
+	Staff
+	Payment record karne wala
+	Fee plan
+	Regular, Student, Quarterly
+	Expense category
+	Rent, salaries, electricity
+	Status
+	Unpaid, partial, paid; active/expired
+	Har report mein date ka meaning clear hoga:
+* Collection: actual payment received date.
+* Expense payments: actual payment made date.
+* Invoices: issue date ya due date—selected option.
+* Expenses: expense date.
+* Expiry: membership ka last valid day.
+Dates Asia/Karachi timezone ke mutabiq hongi.
+3. Collection report ka example
+Owner 1–31 October → Collection → Apply kare:
+Metric
+	Example amount
+	Cash received
+	Rs. 100,000
+	Verified account transfers
+	Rs. 60,000
+	Total received
+	Rs. 160,000
+	Member refunds
+	Rs. 5,000
+	Net collection
+	Rs. 155,000
+	Pending transfers count nahi honge. Reversed incorrect payments received total se exclude hongi.
+Total card click karne par underlying payment list khulegi. Kisi row se payment detail aur receipt access ho sakegi.
+4. Dues report mein current aur historical view
+View
+	Meaning
+	Current outstanding
+	Abhi ka unpaid balance
+	As of selected date
+	Us date tak ke charges, payments aur adjustments se balance
+	Example: Ahmed par 31 October ko Rs. 1,000 dues the, jo 2 November ko pay hue:
+* 31 October as-of report: Rs. 1,000.
+* Current report: Rs. 0.
+Sirf current balance dekh kar purani date ki report generate nahi karenge. Historical balances ke liye dated financial records use honge.
+Dues list mein:
+Member
+	Total outstanding
+	Overdue
+	Upcoming
+	Membership
+	Ahmed
+	Rs. 3,000
+	Rs. 1,000
+	Rs. 2,000
+	Active
+	Member ka advance credit separately visible hoga. Archived members ke outstanding dues bhi report mein included rahenge.
+5. Expenses aur cash movement
+Expense report recorded charges dikhayegi; expense-payment report actual outflow.
+Example: October rent Rs. 20,000, November mein pay hua → October expenses mein charge aur November expense payments mein outflow.
+Collection minus refunds minus expense payments ka result recorded net cash movement hoga. Usko profit ya actual account balance label nahi karenge.
+6. Export ka flow
+Filters apply → results verify → Export → format choose → file download.
+Format
+	Use
+	CSV
+	Data import aur simple spreadsheet analysis
+	Excel — XLSX
+	Formatted table, totals aur filters
+	PDF
+	Print/share karne ke liye report
+	Export mein gym name, report title, selected filters, timezone, generated time, totals aur relevant columns honge.
+Export poore filtered result ka hoga, sirf current visible page ka nahi. Screen aur export same calculations use karenge.
+Large export ho toh:
+Export requested → processing → ready → download.
+Failed export retry ho sakega. Payment/member records par koi effect nahi hoga.
+7. Access aur backend checks
+Role
+	Report access
+	Owner
+	Full financial aur operational reports/export
+	Receptionist
+	Apni collection aur permitted operational lists
+	Trainer
+	Assigned members ki permitted training/attendance information
+	Member
+	Apni payments, receipts aur attendance
+	Backend permissions check karega. Export files private hongi; temporary download access hoga. Export action audit mein record hoga.
+Verification mein check karenge: totals details se match karein, pending transfers exclude hon, historical dues correct hon aur screen/export match karein.
+________________
+
+
+13. Attendance — optional
+Tumhare gym mein attendance essential nahi, isliye starting default “Disabled” rakhenge. Owner jab chahe enable kar sakega.
+1. Enable/disable ka flow
+Owner → Settings → Attendance → Enable → Save.
+Setting
+	Behavior
+	Disabled
+	Attendance menu/check-in hide; fees, memberships aur coaching normal
+	Enabled
+	Check-in aur attendance history available
+	Dobara disabled
+	New check-ins stop; old history preserve
+	Attendance band karne se previous records delete nahi honge. Owner unki history/export access kar sakega.
+Backend bhi disabled feature par new check-in requests reject karega; sirf button hide nahi hoga.
+2. Pehle version ka check-in flow
+Receptionist → Attendance → member search → identity/status check → Check In → save.
+1. Name, phone ya Member ID se member search.
+2. Photo/name se correct member confirm.
+3. Membership status aur dues warning dekhe.
+4. Check In click.
+5. Server current date/time save kare.
+6. “Check-in recorded” confirmation.
+7. Today’s attendance list update.
+Biometric ya QR hardware pehle version mein required nahi hoga.
+3. Membership aur dues ke rules
+Member ki situation
+	Default behavior
+	Active membership
+	Check-in allowed
+	Active, lekin dues baqi
+	Warning; check-in allowed
+	Upcoming membership
+	Normal check-in blocked
+	Expired/frozen/cancelled
+	Normal check-in blocked
+	Archived member
+	Normal check-in blocked
+	App login activate nahi
+	Valid membership ho toh staff check-in allowed
+	Owner reason ke saath exceptional visit allow kar sakega; override audit mein visible hogi.
+Dues se automatic entry block nahi karenge, kyunki tumhare system mein membership validity aur payment status separate hain.
+4. Check-out aur repeat visits
+Starting version mein check-in only rakhenge. Check-out na ho toh duration ya “abhi gym mein maujood members” calculate nahi karenge.
+* Double-click/retry same check-in dobara create nahi karega.
+* Same day existing visit ho toh warning aayegi.
+* Member doosri baar aaye toh staff Record Another Visit explicitly choose karega.
+* Reports unique members aur total visits separately dikhayengi.
+Example: Ahmed subah aur shaam aaya → 1 unique member, 2 visits.
+5. Attendance record mein kya save hoga?
+Field
+	Purpose
+	Member
+	Kis member ki visit
+	Check-in time
+	Actual visit date/time
+	Recorded at
+	Entry software mein kab hui
+	Recorded by
+	Staff identity
+	Entry method
+	Manual; future mein QR
+	Membership reference
+	Visit ke waqt relevant membership
+	Override reason
+	Exception ho toh
+	Correction status
+	Wrong entry void hui ya valid hai
+	Default time backend se aayega. Purani missed entry add karna owner-only action hoga, reason ke saath; actual visit time aur recorded time separate rahenge.
+6. Wrong check-in ka flow
+Wrong member select ho gaya:
+Attendance entry → Void → reason → confirm → correct member check-in.
+Original record history mein rahega, valid attendance totals mein count nahi hoga. Ordinary staff silently date/member overwrite nahi karega.
+7. Attendance screen aur member view
+View
+	Information
+	Reception
+	Today’s visits, member search, check-in
+	Owner
+	Date range, member/staff filters, overrides aur export
+	Trainer
+	Assigned members ki permitted attendance
+	Member
+	Apni visit history
+	Member app se unrestricted “I attended” button nahi rakhenge. Future self-check-in ke liye gym-location/QR verification ka separate flow banana hoga.
+8. Backend implementation aur verification
+Attendance settings, visit records aur corrections audit database mein save honge. Har check-in par backend feature setting, staff permission aur member eligibility verify karega.
+Checks:
+* Disabled setting par new entry na bane.
+* Retry se duplicate visit na bane.
+* Expired member ka ordinary check-in block ho.
+* Owner override reason record ho.
+* Voided entry totals se exclude ho.
+* Attendance disable karne par membership/payment modules normal chalte rahein.
+
+
+1. Settings screen ka structure
+Owner login → Settings → relevant section → changes → preview → Save.
+Section
+	Kya configure hoga?
+	Gym details
+	Name, logo, address, phone, contact email
+	Payment accounts
+	Bank/Easypaisa/JazzCash details
+	Membership rules
+	Renewal defaults, freeze policy aur expiry reminders
+	Fees preferences
+	Admission fee defaults, invoice due-date defaults
+	Receipts
+	Footer, print layout aur numbering prefix
+	Staff permissions
+	Staff access aur account status
+	Attendance
+	Enable/disable aur allowed settings
+	Notifications
+	Reminder timing, channels aur templates
+	Privacy/sharing
+	Member activity-sharing controls
+	System information
+	Backup status, email delivery status, configuration health
+	Currency PKR aur timezone Asia/Karachi starting setup mein fixed rahenge. Financial records banne ke baad inko ordinary settings edit se change nahi karenge.
+2. Gym details ka flow
+Owner name, logo, address aur contact details update karega.
+1. Current values form mein load hongi.
+2. Owner changes enter karega.
+3. Preview mein receipt/email par appearance dikhegi.
+4. Backend values validate karega.
+5. Save par settings aur audit entry saath record hongi.
+New receipts aur emails updated branding use karenge. Already issued receipts ki original details preserve rahengi.
+3. Payment accounts configure karna
+Settings → Payment Accounts → Add Account → details → Save.
+Field
+	Example
+	Account type
+	Bank / Easypaisa / JazzCash
+	Display name
+	Gym HBL Account
+	Account holder
+	Gym/owner ka account title
+	Account number/IBAN
+	Transfer destination
+	Instructions
+	“Transfer reference submit karein”
+	Status
+	Active/inactive
+	Default account
+	Member ko pehle kaunsa account dikhana hai
+	Member app mein active receiving accounts show honge. Transfer submission selected account se link hogi.
+Account change/deactivate karne ke rules:
+* Old payments ka receiving account overwrite nahi hoga.
+* Deactivated account new transfers ke liye hide hoga.
+* Us account ke pending proofs review ke liye available rahenge.
+* Used account delete nahi hoga.
+* Owner sensitive account details change kare toh password dobara verify karwayenge.
+Yahan receiving details save hongi; bank login password, PIN ya OTP nahi.
+4. Membership aur fees settings
+Setting
+	Starting behavior
+	Renewal start
+	Previous period ke end ke agle din; staff preview confirm kare
+	Admission fee
+	First joining par; renewal par repeat nahi
+	Invoice due date
+	Configured default; invoice preview mein visible
+	Freeze requests
+	Owner approval required
+	Maximum freeze days
+	Owner configurable
+	Expiry reminders
+	Example: 7 aur 1 din pehle
+	Dues reminders
+	Due date/overdue schedule
+	Discounts
+	Owner approval
+	Attendance with dues
+	Warning; valid membership ka check-in allowed
+	Settings defaults hain. Har plan ki price/duration Fee Plans module mein manage hogi.
+Default change se purani invoices, approved freezes aur existing membership agreements automatically recalculate nahi honge. New transactions updated rules use karengi.
+5. Receipt settings
+Owner configure karega:
+Option
+	Behavior
+	Logo/contact details
+	New receipts ki branding
+	Footer
+	Example: “Thank you for choosing OXGEN GYM”
+	Default print format
+	A4 ya 80 mm
+	Receipt prefix
+	Example: OXG-RCP
+	Email receipt preference
+	Automatic send on/off
+	Receipt counter manually reset karke duplicate numbers create nahi kar sakenge. Issued receipts ka amount/number settings se edit nahi hoga.
+6. Staff permissions ka flow
+Owner → Staff/Permissions → staff select → allowed access → confirm.
+Example: receptionist ko member registration aur payments ka access, lekin refunds aur full financial exports ka access nahi.
+* Role ya permissions change ki audit entry banegi.
+* Existing sessions revoke honge; next login par updated access milega.
+* Suspended staff ki new requests reject hongi.
+* Last active owner ko suspend/demote karke gym ko owner ke baghair nahi chhor sakenge.
+Frontend menu aur backend permissions dono updated rules follow karenge.
+7. Attendance aur notification settings
+Attendance default Disabled rahegi. Enable karne par check-in options available honge; disable karne par new entries stop, old history preserve.
+Notifications ke liye owner choose karega:
+Option
+	Example
+	Event
+	Invoice, payment, expiry, trainer update
+	Channel
+	In-app / email / push, jab implemented ho
+	Timing
+	Expiry se 7 din pehle
+	Template
+	Gym-branded message
+	Enabled
+	On/off
+	Settings save hone par existing scheduled reminders review/reschedule honge. Duplicate reminder prevent karne ke liye event/member/period identify karenge.
+SMTP password aur Cloudinary/database secrets ordinary settings mein display nahi honge. Deployment configuration mein securely rahenge; owner ko connection/delivery status dikh sakta hai.
+8. Audit History mein kya record hoga?
+Owner → Audit History → filters → event → details.
+Event
+	Example
+	Member create/edit/archive
+	Phone update ya profile archive
+	Staff access change
+	Receptionist permission remove
+	Plan update
+	Monthly price Rs. 3,000 → Rs. 3,500
+	Membership action
+	Renewal, freeze, cancellation
+	Financial action
+	Payment confirm, reversal, refund, discount
+	Expense action
+	Expense add/correct/payment
+	Settings change
+	Receiving account update
+	Export
+	Kis report ka export hua
+	Security event
+	Login failures, account suspension, session revocation
+	Successful login/logout security history mein record ho sakte hain. Har screen open ya harmless request ko detailed audit event nahi banayenge.
+9. Ek audit entry kaisi dikhegi?
+Example: owner payment reverse karta hai.
+Field
+	Value
+	Actor
+	Owner — Hassan
+	Action
+	Payment reversed
+	Record
+	PAY-000125 / receipt reference
+	Before
+	Confirmed payment Rs. 20,000
+	After
+	Reversed
+	Reason
+	Actual received amount Rs. 2,000 tha
+	Time
+	Karachi date/time
+	Related action
+	Corrected payment ka reference
+	Profile edit par changed fields dikhenge. Passwords, session tokens, activation codes aur SMTP secrets audit mein save nahi honge. Private health details ki unnecessary copies bhi nahi banayenge.
+10. Audit filters aur access
+Filter
+	Use
+	Date/time range
+	Selected period
+	Staff/user
+	Ek person ke actions
+	Module
+	Payments, members, settings
+	Action
+	Create, edit, reverse, approve
+	Record ID
+	Specific invoice/payment/member
+	Source
+	Staff, member ya automated job
+	Owner operational audit access karega. Staff ko apni permitted actions ki limited history mil sakti hai. Member ko relevant payment/membership history dikhegi; poore gym ka audit nahi.
+Automated action par actor System hoga, saath job/reference rahega.
+11. Audit ko change/delete kar sakte hain?
+Normal app se audit entry edit/delete nahi hogi, owner bhi nahi.
+Correction par naya event add hoga; original event preserve rahega. Audit view explanation dega, lekin payment/report totals actual financial records se calculate honge.
+Database administrator ke paas technical access hota hai, isliye sirf audit table ko “tamper-proof” nahi kahenge. Application permissions aur backup policy se history protect karenge.
+12. Backend implementation
+Record
+	Purpose
+	Gym settings
+	Branding aur operational defaults
+	Payment accounts
+	Transfer destinations aur account history
+	Permissions
+	Staff ke allowed actions
+	Notification preferences
+	Events, timing aur channels
+	Audit events
+	Actor, action, changed fields, reason, record reference
+	Configuration version
+	Simultaneous edits aur rule versions manage karna
+	Backend flow:
+1. Session aur setting-specific permission check.
+2. Sensitive change ho toh recent password verification check.
+3. Values aur current version validate.
+4. Change aur audit entry ek transaction mein save.
+5. Affected jobs/configuration update.
+6. Frontend ko saved values return.
+Do edits ek waqt hon toh stale form se doosre owner ka change silently overwrite nahi hoga. Form bolega “Settings change ho chuki hain; latest version review karein.”
+Verification mein check karenge: unauthorized staff settings na badal sake, financial correction ka audit zaroor bane, secrets history mein na aayein aur default updates purane invoices ko change na karein.
+
+
+15. Member dashboard
+Member login → apna Home dashboard → membership, fees aur workout summary.
+Web member panel aur Flutter app same backend ka data use karenge.
+1. Home par kya dikhega?
+Section
+	Information / action
+	Membership card
+	Plan, status, start date, last valid day
+	Expiry notice
+	Kitne din baqi; Renew Request button
+	Fee summary
+	Total outstanding, overdue aur upcoming installments
+	Latest payment
+	Last confirmed amount/date; receipt link
+	Pending transfer
+	Submitted proof ka verification status
+	Today’s workout
+	Aaj ki exercises; Start/View Workout
+	Assigned trainer
+	Trainer name aur assignment
+	Announcements
+	Gym updates
+	Quick actions
+	Payments, receipts, progress, profile
+	Example:
+Ahmed ka dashboard
+	Value
+	Plan
+	Regular Monthly
+	Membership
+	Active — 4 November tak
+	Outstanding
+	Rs. 1,500
+	Overdue
+	Rs. 500
+	Upcoming installment
+	Rs. 1,000
+	Today’s workout
+	Upper Body
+	Trainer
+	Bilal
+	Outstanding aur overdue ko separate dikhayenge, taake future installment ko late fee na samjha jaye.
+2. Member payment section ka flow
+Dashboard → Payments → invoice → details → payment history/receipt.
+Member:
+* Apni invoices aur remaining balance dekhega.
+* Gym ke receiving account details dekhega.
+* Transfer reference/proof submit karega.
+* Pending/approved/rejected status dekhega.
+* Confirmed payments ki receipts download karega.
+Member khud payment ko “Paid” mark nahi karega. Staff verification ke baad dues update hongi.
+3. Renewal request ka flow
+Membership card → Request Renewal → available published plan select → preferred start date → submit.
+Request statuses:
+Status
+	Meaning
+	Pending
+	Staff review baqi
+	Approved
+	Staff ne dates/charges confirm karke renewal create ki
+	Rejected
+	Reason visible
+	Withdrawn
+	Member ne pending request cancel ki
+	Request bhejne se membership extend ya payment confirm nahi hogi. Approval ke baad new period aur invoice dashboard par aayenge.
+4. Empty, expired aur failed-loading states
+Situation
+	Dashboard behavior
+	Membership assigned nahi
+	“Membership setup pending”
+	Trainer assigned nahi
+	“Trainer not assigned”
+	Workout published nahi
+	“Workout plan abhi available nahi”
+	Membership expired
+	Expiry notice; fees/receipts/profile available
+	Backend request fail
+	Error + Retry; Rs. 0 ya “Paid” assume nahi
+	Cached information show ho
+	Last updated time visible
+	Member sirf apna data access karega. Backend session se member identify karega; frontend ke bheje hue Member ID par blindly trust nahi karega.
+________________
+
+
+16. Trainer assignment
+Owner → member profile → Assign Trainer → active trainer select → start date → confirm.
+1. Assignment screen
+Field
+	Purpose
+	Member
+	Selected gym member
+	Trainer
+	Active trainer account
+	Start date
+	Assignment kab se effective hai
+	Coaching focus
+	General fitness, strength, etc.
+	End date
+	Optional
+	Operational note
+	Assignment ki explanation
+	Pehle version mein ek member ka ek primary trainer rakhenge. Ek trainer multiple members handle kar sakega.
+2. Confirm karne par kya hoga?
+1. Backend owner permission verify karega.
+2. Trainer active aur correct role mein hai, check karega.
+3. Existing assignment/overlap check hoga.
+4. Assignment save aur audit entry create hogi.
+5. Member ko trainer information dikhegi.
+6. Trainer ki My Members list mein member aayega.
+7. Notification create hogi.
+Future start date ho toh assignment scheduled rahegi; access effective date se milega.
+3. Trainer ko kaunsa data milega?
+Data
+	Access
+	Name, Member ID, coaching goal
+	Assigned member ke liye
+	Relevant training preferences/limitations
+	Permitted coaching information
+	Workout plans aur completion logs
+	Assigned member ke liye
+	Measurements/progress photos
+	Member sharing permissions ke mutabiq
+	Fitness activity summaries
+	Separate sharing consent ke mutabiq
+	Payments, receipts, gym revenue
+	Default access nahi
+	Doosre trainer ke members
+	Access nahi
+	Assignment aur private-data consent separate hain. Trainer assign hone se Health Connect data automatically share nahi hoga.
+4. Trainer change karne ka flow
+Owner → Change Trainer → new trainer + effective date → handover preview → confirm.
+* Old assignment close hogi; history preserve hogi.
+* Old trainer ka member access effective change par band hoga.
+* New trainer ko relevant workout history aur permitted data milega.
+* Private activity/progress sharing naye trainer ke liye dobara confirm karwayenge.
+* Member ko change notification milegi.
+* Current workout plan member ko available rahega, jab tak replace/archive na ho.
+Old trainer ka naam previous plans par creator ke taur par rahega.
+5. Trainer inactive ho jaye toh
+Trainer suspend/leave kare → access immediately revoke → owner ko affected members list dikhe → reassign.
+Member dashboard par “Trainer reassignment pending” notice hoga. Existing published workouts preserve rahenge.
+Assignment remove karne se member account, membership ya payments delete nahi honge.
+________________
+
+
+17. Workout plans
+Trainer → assigned member → goal/history review → workout draft → publish → member performs → completion log → trainer reviews.
+1. Workout plan mein kya hoga?
+Field
+	Example
+	Plan title
+	Beginner Strength
+	Goal
+	General strength
+	Effective start/end
+	Four-week programme
+	Weekly schedule
+	Monday, Wednesday, Friday
+	Workout day
+	Upper Body / Lower Body
+	Exercise
+	Dumbbell bench press
+	Sets + reps
+	3 sets × 10 reps
+	Target load
+	Optional suggested weight
+	Rest
+	60 seconds
+	Instructions
+	Technique cues
+	Alternative exercise
+	Equipment unavailable ho toh
+	Demo link/media
+	Optional
+	Har exercise sets/reps wali nahi hogi:
+Exercise type
+	Targets
+	Strength
+	Sets, reps, optional weight
+	Cardio
+	Duration, optional distance/intensity
+	Mobility/stretching
+	Duration ya repetitions
+	2. Plan banane ka flow
+1. Trainer My Members → Ahmed open kare.
+2. Goal, experience aur relevant limitations review kare.
+3. Create Workout Plan select kare.
+4. Template copy kare ya scratch se banaye.
+5. Weekly days aur exercises add kare.
+6. Targets, rest aur instructions enter kare.
+7. Draft save kare.
+8. Member preview check kare.
+9. Publish kare.
+Draft member ko nahi dikhega. Publish hone par member ko notification aur effective date ke mutabiq plan milega.
+Pehle version mein ek current primary workout programme rakhenge. Naya programme publish karte waqt previous programme ki end date/archive treatment preview hogi.
+3. Member workout ka flow
+Home → Today’s Workout → Start Session → exercise details → actual results log → Finish.
+Example:
+Exercise
+	Planned
+	Member log
+	Squat
+	3 × 10
+	10, 10, 8 reps; 20 kg
+	Bench press
+	3 × 10
+	10, 10, 10 reps; 15 kg
+	Treadmill
+	15 minutes
+	12 minutes
+	Planned aur actual results separate save honge. Member exercise skip kare toh optional reason de sakega: equipment unavailable, discomfort ya time shortage.
+4. Session status
+Status
+	Meaning
+	Not started
+	Scheduled workout abhi start nahi
+	In progress
+	Session chal rahi hai
+	Completed
+	Member ne session finish ki
+	Partially completed
+	Kuch exercises complete hui
+	Skipped
+	Member ne explicitly skip record kiya
+	Sirf log na aane se workout Skipped mark nahi karenge; woh Not logged rahega.
+Workout completion member-reported hogi. Workout log se gym attendance automatically create nahi hogi, kyunki member gym ke bahar bhi exercise kar sakta hai.
+5. Trainer review
+Trainer → member → Workout History → session → planned vs actual results.
+Trainer dekhega:
+* Scheduled sessions mein kitni logged hui.
+* Reps/weight/duration mein changes.
+* Skipped exercises aur reasons.
+* Member feedback.
+* Agle plan mein adjustment ki zaroorat.
+Trainer feedback add karega; member ko notification milegi. Member ke actual results trainer silently overwrite nahi karega.
+6. Plan update aur history
+Published plan update karne par new version banegi.
+* Previous completed sessions original plan version se linked rahengi.
+* New version future sessions par apply hogi.
+* In-progress session apne starting version par rahegi.
+* Exercise remove/change karne se historical logs disappear nahi honge.
+* Member plan instructions edit nahi kar sakega; apne results/notes log karega.
+7. Internet issue aur corrections
+Member ke unsent workout entries device par temporarily draft ke taur par save karenge. UI “Not synced” dikhayegi; reconnect par retry hoga.
+Har session/log ki stable ID hogi, taake repeated sync se duplicate results na banein. Server save confirmation ke baad Synced status aayega.
+Member apne mistaken log correct kar sakega; edited time/history rahegi. Correction se assigned targets change nahi honge.
+8. Backend records aur permissions
+Record
+	Purpose
+	Trainer assignments
+	Member–trainer relationship aur effective dates
+	Workout plans + versions
+	Programme aur published history
+	Workout days/exercises
+	Schedule aur targets
+	Workout sessions
+	Member ki actual session
+	Exercise/set logs
+	Actual reps, load, duration
+	Feedback
+	Member/trainer comments
+	Sharing preferences
+	Private progress/activity access
+	Backend har action par check karega:
+* Trainer abhi member ko assigned hai?
+* Member sirf apna session log kar raha hai?
+* Plan published/effective hai?
+* Submitted targets/results valid hain?
+* Request pehle process toh nahi hui?
+Implementation pehle member dashboard ki membership/fees summary se shuru hogi, phir trainer assignment, phir workout draft → publish → member log → trainer review ka complete flow banega.
+
+
+Bhai, “Diet Plans” mein trainer member ki preferences aur goals ke mutabiq meal guidance assign karega. “Progress Tracking” mein member weight, measurements aur optional photos record karega, jisse time ke saath changes compare honge.
+18. Diet plans
+Member preferences complete kare → trainer review kare → plan draft → publish → member follow/log kare → trainer update kare.
+1. Member se kya information lenge?
+Member app → Diet Preferences:
+Field
+	Purpose
+	Goal
+	Weight management, muscle gain ya general fitness
+	Food preference
+	Vegetarian/non-vegetarian, preferred foods
+	Allergies/intolerances
+	Foods avoid karne ke liye
+	Budget
+	Affordable options choose karna
+	Routine
+	Wake-up, work aur meal timings
+	Cooking/access
+	Ghar ka khana, hostel ya outside meals
+	Disliked foods
+	Practical alternatives
+	Relevant restrictions
+	Member ki di hui dietary restrictions
+	Member onboarding ke baad bhi preferences update kar sakega. Change hone par assigned trainer ko review notice milega; published plan automatically rewrite nahi hoga.
+2. Trainer plan kaise banayega?
+My Members → member → Diet → Create Plan.
+Plan field
+	Example
+	Title
+	Beginner meal routine
+	Effective dates
+	Start date + review date
+	Meal slots
+	Breakfast, lunch, dinner, snacks
+	Suggested timing
+	Optional
+	Food + portion
+	Clear quantity/unit
+	Alternatives
+	Similar practical options
+	Notes
+	Preparation ya substitutions
+	Nutrition targets
+	Optional; trainer-entered estimates
+	Calories/macros show karein toh estimate label aur source rahega. Sirf meal ka naam likhne se app accurate nutrition assume nahi karegi.
+Pehle release mein manual trainer-authored plans rakhenge. Automatic calorie prescription, supplements ya medical diets is flow ka hissa nahi honge.
+3. Draft → publish flow
+1. Trainer preferences aur restrictions review kare.
+2. Template copy kare ya fresh plan banaye.
+3. Meals, portions aur alternatives add kare.
+4. Required fields aur declared allergies check kare.
+5. Preview dekhe.
+6. Publish kare.
+7. Member ko notification mile.
+8. Effective date se plan dashboard par show ho.
+Declared allergy se matching ingredient ho toh warning aur review block hoga. Ingredient checking ko guaranteed allergy detection nahi samjhenge.
+Medical condition ke liye specialist plan ho toh usko clearly specialist-provided guidance ke taur par attach/reference kar sakenge; general trainer ko clinical prescription flow nahi denge.
+4. Member ko kya dikhega?
+Dashboard → Diet → Today’s Meals → details/alternatives.
+Action
+	Behavior
+	View plan
+	Meals, portions, alternatives aur notes
+	Mark followed
+	Member-reported completion
+	Mark partly followed
+	Partial adherence
+	Log different meal
+	Actual food/quantity optional
+	Skip meal
+	Optional reason
+	Add feedback
+	Budget, taste, availability ya difficulty
+	Request change
+	Trainer review request
+	Plan follow mark karna actual calories ka proof nahi. Actual intake estimates tab hongi jab member quantities log kare aur nutrition data available ho.
+Log na ho toh Not logged dikhega; automatically skipped nahi.
+5. Plan update/history
+Trainer → feedback/preferences review → Create New Version → Publish.
+* Old plan aur previous meal logs preserve rahenge.
+* Har log relevant plan version se linked hoga.
+* New version future dates se apply hogi.
+* Member meals/targets edit nahi karega; apni actual intake aur feedback enter karega.
+* Trainer change hone par new assigned trainer existing plan review kar sakega.
+6. Permissions aur backend
+Role
+	Access
+	Member
+	Apna plan, preferences aur logs
+	Assigned trainer
+	Plan author/update aur permitted logs
+	Owner
+	Operational assignment; private dietary information consent ke mutabiq
+	Receptionist
+	Diet details ka default access nahi
+	Backend mein preferences, plan versions, meals/alternatives, adherence logs aur feedback save honge. Publish/update par current trainer assignment verify hogi. Repeated sync se duplicate meal logs prevent honge.
+________________
+
+
+19. Progress tracking
+Member baseline enter kare → regular entries → weekly/monthly comparison → trainer review.
+1. Kaunsi progress record hogi?
+Data
+	Entry
+	Weight
+	Kilograms
+	Body measurements
+	Waist, chest, hips, arms/thighs—centimetres
+	Progress photos
+	Optional front/side/back
+	Goal
+	Target + optional target date
+	Notes
+	Member ka context
+	Workout performance
+	Existing workout logs se reps/load/duration trends
+	Har field optional hoga; member sirf weight track karna chahe toh measurements/photos mandatory nahi.
+2. Baseline ka flow
+Progress → Add First Entry → measurement date → values → Save.
+Example:
+Baseline
+	Value
+	Date
+	5 October
+	Weight
+	75 kg
+	Waist
+	90 cm
+	Goal
+	Member-selected goal
+	Baseline comparison ka starting point hoga. Goal aur achieved measurements separate rahenge.
+3. Next entry ka flow
+1. Member Add Progress open kare.
+2. Actual measurement date select kare.
+3. Weight/selected measurements enter kare.
+4. Optional photos/notes add kare.
+5. Preview check kare.
+6. Save kare.
+7. Charts aur comparisons update hon.
+Backend positive values, units aur plausible ranges check karega. Unusual change par confirmation warning hogi; system silently value “correct” nahi karega.
+Same date ki existing entry ho toh Edit Existing ya explicitly separate reading choose karwayenge; retry se duplicate entry nahi banegi.
+4. Weekly/monthly comparison
+Metric
+	Example
+	Baseline weight
+	75 kg
+	Latest weight
+	73.8 kg
+	Change
+	−1.2 kg
+	Baseline waist
+	90 cm
+	Latest waist
+	88 cm
+	Change
+	−2 cm
+	Last recorded
+	Date/time
+	Member weight/measurement trend chart dekh sakega. Weekly view mein available readings ka average aur reading count dikhega; baseline-to-latest comparison clearly separate hoga.
+Missing dates par zero values nahi dalenge. No-data periods empty/gaps rahenge. Different measurements ke latest dates alag hon toh har metric ki date show hogi.
+Weight change ko automatically “good” ya “bad” label nahi karenge; member ke goal aur training context ke saath review hoga.
+5. Photos ka flow aur privacy
+Add Photo → view type/date → upload → sharing choice → Save.
+* Photos default member-only hongi.
+* Assigned trainer ke saath sharing separately opt-in hogi.
+* Front-to-front, side-to-side comparison available hoga.
+* Photo upload optional; face include karna required nahi.
+* Protected Cloudinary delivery use hogi; public URL se private photo expose nahi karenge.
+* Member sharing revoke/delete kar sakega; photo delete hone par accessible copy aur thumbnail remove honge, backups ki retention policy separately apply hogi.
+Trainer reassignment par photo access automatically naye trainer ko grant nahi hoga.
+6. Manual aur synced readings
+Fitness integration add hone par source label rakhenge:
+Source
+	Display
+	Member entry
+	Manual
+	Staff-assisted entry
+	Recorded by staff
+	Connected device/app
+	Synced + source
+	Same reading manual aur sync dono se aaye toh duplicate detection/review hogi. Imported record ID aur source preserve honge; manual entry silently overwrite nahi hogi.
+7. Trainer review ka flow
+My Members → member → Progress → period select → permitted charts/photos → feedback.
+Trainer:
+* Weight aur measurements ki dated trends dekhega.
+* Workout performance compare karega.
+* Member ke notes aur plan adherence review karega.
+* Feedback aur suggested plan changes add karega.
+Trainer feedback measurement ko change nahi karega. Staff-assisted measurement member ki permission se add ho sakegi aur recorder visible hoga.
+8. Edit/delete aur backend
+Member apni wrong entry edit/delete kar sakega. Charts recalculate hongi; audit mein action rahega, private deleted photo ki copy audit mein preserve nahi karenge.
+Backend record
+	Purpose
+	Progress goals
+	Member targets
+	Measurement entries
+	Values, units, actual dates
+	Source identifiers
+	Manual/synced origin aur deduplication
+	Photo references
+	Private assets
+	Sharing preferences
+	Trainer access
+	Feedback
+	Trainer review
+	Implementation flow: pehle diet preferences → plan publish → member feedback; progress mein baseline → next entry → correct comparison. Uske baad private photo sharing aur synced readings connect karenge.
+
+
+Bhai, “Notifications + Announcements” member aur staff ko relevant updates pohanchayega. Notifications specific events se automatically banengi; announcements owner gym ki taraf se publish karega.
+1. Kaunsi notifications hongi?
+Event
+	Recipient
+	Example
+	Invoice issue
+	Member
+	“Aapki new fee invoice available hai.”
+	Installment due/overdue
+	Member
+	“Rs. 1,000 installment due hai.”
+	Payment confirmed
+	Member
+	“Payment confirm ho gayi; receipt dekhein.”
+	Transfer approved/rejected
+	Member
+	Status aur rejection reason
+	Transfer proof submitted
+	Authorized staff
+	“New transfer verification pending.”
+	Membership expiring
+	Member
+	“Membership 7 din mein expire hogi.”
+	Renewal/freeze request decided
+	Member
+	Approval/rejection aur details
+	Trainer assigned/changed
+	Member + trainer
+	Assignment update
+	Workout/diet published
+	Member
+	“New plan available hai.”
+	Member feedback/request
+	Assigned trainer
+	Review required
+	Gym announcement
+	Selected audience
+	Timing change ya holiday
+	2. Kaunse channels use honge?
+Channel
+	Kaise work karega?
+	In-app
+	Web/Flutter ke notification inbox mein
+	Email
+	Tumhara custom backend + Google SMTP
+	Mobile push
+	Flutter ke liye Firebase Cloud Messaging
+	Firebase yahan sirf push delivery ke liye hoga; main database Aiven PostgreSQL hi rahega.
+Pehle in-app + email, phir Flutter ke saath push connect karenge. SMS/WhatsApp sending abhi scope mein nahi hogi.
+3. Automatic notification ka complete flow
+Example: receptionist payment confirm karta hai.
+1. Backend payment aur receipt save karta hai.
+2. Usi transaction mein notification event queue mein save hota hai.
+3. Worker event process karta hai.
+4. Member ke preferences aur available channels check hote hain.
+5. In-app notification create hoti hai.
+6. Email/push delivery attempt hota hai.
+7. Har channel ka result record hota hai.
+Email ya push fail hone se payment undo nahi hogi. Notification delivery separately retry hogi.
+Notification tap karne par related screen khulegi—payment update se receipt, workout update se assigned plan.
+4. Fee aur expiry reminders
+Owner → Settings → Notifications → reminder schedule.
+Reminder
+	Starting schedule
+	Membership expiry
+	7 din aur 1 din pehle
+	Installment due
+	Due date par
+	Overdue payment
+	Example: 3 din baad; further reminders configured
+	Membership expired
+	Ek expiry notice
+	Scheduler Karachi dates ke mutabiq records check karega. Bhejne se immediately pehle latest status dobara verify hoga.
+Example: reminder queue mein tha, lekin member payment kar chuka hai → obsolete reminder skip hoga.
+Installments wale member ko currently due amount ka reminder jayega; future installments ko overdue nahi kahenge.
+5. Duplicate aur repeated reminders
+Situation
+	Handling
+	Scheduled job dobara run ho
+	Same invoice/period/reminder ki duplicate notification nahi
+	Payment request retry ho
+	Same confirmation event dobara create nahi
+	Membership dates change hon
+	Purane scheduled reminder invalidate; updated dates use
+	SMTP temporary failure
+	Limited retries; phir failed status
+	Provider timeout, result unclear
+	Uncertain status track; external delivery mein rare duplicate possible
+	App-level duplicates prevent karenge. External email/push delivery ko guaranteed “exactly once” promise nahi karenge.
+6. Member ka notification inbox
+Member dashboard → Bell icon → notifications list → detail.
+Option
+	Behavior
+	Unread badge
+	Unread notifications ki count
+	Open notification
+	Read mark + related screen
+	Mark all read
+	Inbox read status update
+	Filters
+	Payments, membership, training, announcements
+	Preferences
+	Optional email/push categories on/off
+	Email bhejna notification read hona nahi hai. Member web par read kare toh Flutter inbox mein bhi read status update hoga.
+Deleted/unavailable record ka link khule toh clear message milega; member ko doosre user ka record nahi dikhega.
+7. Member preferences aur privacy
+Member → Profile → Notification Preferences.
+* Optional reminders aur training updates ke email/push controls.
+* In-app payment/membership history available rahegi.
+* Email unavailable ho toh in-app channel work karega.
+* Push permission deny ho toh app ke baqi features normal chalenge.
+* Promotional announcements ke controls operational notices se separate honge.
+Phone lock screen par sensitive details default hide hongi. Example: “Aapki payment information update hui hai—app kholein.” Dues amount, injury, weight ya diet details push preview mein nahi.
+8. Announcements create karne ka flow
+Owner → Announcements → Create → audience → content → preview → publish/schedule.
+Field
+	Purpose
+	Title
+	“Friday gym timings”
+	Message
+	Announcement details
+	Audience
+	All members, active members, staff ya selected members
+	Publish time
+	Abhi ya scheduled
+	Expiry time
+	Notice kab hide/archive ho
+	Priority
+	Normal / important
+	Channels
+	In-app, optional email/push
+	Attachment
+	Optional poster/document
+	Example: owner Friday timings ka notice banaye → active members select kare → preview dekhe → publish → selected members ke inbox mein notice aaye.
+Scheduled audience ka default publish time par evaluate hoga; send ke waqt archived/suspended accounts aur preferences check hongi.
+9. Edit, cancel aur expiry
+Action
+	Behavior
+	Draft edit
+	Delivery nahi; freely update
+	Scheduled notice cancel
+	Pending delivery stop
+	Published notice edit
+	Version save; in-app content update
+	Important correction resend
+	Owner explicitly choose kare
+	Announcement expire
+	Active notice area se hide; history retained
+	Already delivered email/push
+	Wapas remove nahi ho sakti
+	Published announcement edit karne se automatic new email/push nahi jayegi, jab tak owner Notify about update choose na kare.
+10. Delivery status owner ko kya dikhega?
+Status
+	Meaning
+	Queued
+	Send attempt baqi
+	Accepted by provider
+	Email/push service ne request accept ki
+	Failed
+	Attempt fail; reason available
+	Skipped
+	Preferences, missing email ya obsolete event
+	Read
+	In-app notification open/read hui
+	Provider acceptance ko “member ne receive/read kar liya” label nahi karenge. Gmail SMTP se inbox placement ya read confirmation guaranteed nahi milegi.
+Announcement overview mein targeted users, in-app records, email/push attempts aur failures ki counts dikhenगी.
+11. Permissions aur device handling
+Role
+	Access
+	Owner
+	Announcements publish, schedules/settings aur delivery overview
+	Receptionist
+	Permitted operational alerts; bulk announcement default nahi
+	Trainer
+	Assigned-member alerts; plan publish se relevant update
+	Member
+	Apna inbox aur preferences
+	Push token account/device se link hoga. Logout par device ki association remove hogi; expired tokens cleanup honge. Shared phone par previous member ki notifications deliver nahi honi chahiye.
+12. Backend records aur implementation
+Record
+	Kaam
+	Notification events/outbox
+	Business event se reliable processing
+	Recipient notifications
+	Har user ka inbox/read status
+	Channel attempts
+	Email/push attempts, errors, retries
+	Reminder rules
+	Timing aur duplicate identifiers
+	Announcements
+	Content, audience, schedule, versions
+	Preferences/device tokens
+	Channel choices aur device routing
+	Implementation order:
+1. In-app inbox + unread/read status.
+2. Payment, invoice aur plan-update events.
+3. Custom SMTP templates + delivery retries.
+4. Fee/expiry scheduler + stale/duplicate checks.
+5. Announcements publish/schedule.
+6. Flutter push + device/preferences handling.
+Verification mein check karenge: paid invoice ka stale reminder skip ho, retry se duplicate inbox entry na bane, failed email business transaction ko affect na kare, aur har user sirf apni notifications access kare.
+
+
+Bhai, “Fitness Data Connection” member ke Android phone ki fitness information ko OXGEN GYM app se connect karega. Member choose karega kaunsa data app read/save kare aur kaunsa assigned trainer ke saath share ho.
+Connection optional hogi. Permission na dene par membership, fees, workouts aur diet features normal chalenge.
+1. Connection kis cheez se hogi?
+Android Flutter app Health Connect se data read karegi. Health Connect phone par supported fitness sources ka data permission ke saath available karta hai. Backend ya web panel directly phone ka Health Connect data nahi padhega. developer.android.com
+Part
+	Kaam
+	Fitness source/device
+	Activity record kare
+	Health Connect
+	Available health records ka on-device store
+	OXGEN Flutter app
+	Granted permissions ke mutabiq records read kare
+	OXGEN backend
+	Member-approved summaries save kare
+	Member/trainer web
+	Backend se permitted summaries dekhe
+	Google Fit installed hone se uska saara data automatically available assume nahi karenge. Connection screen available data check karegi.
+2. Member connection kahan se start karega?
+Member app → Profile/Activity → Connect Fitness Data.
+Pehle explanation screen hogi:
+“OXGEN aapki selected fitness information read karke activity summaries dikhayega. Aap decide kar sakte hain ke assigned trainer ko kya share karna hai. Connection kabhi bhi band kar sakte hain.”
+Is screen par Continue aur Not Now honge. Login ke waqt zabardasti permission popup nahi khulega.
+3. Device availability check
+Continue ke baad app check karegi:
+Situation
+	App ka behavior
+	Health Connect available
+	Data-selection screen
+	Setup/update required
+	Relevant setup instructions/settings link
+	Device unsupported
+	Clear unavailable message; manual tracking available
+	Member web se connect kare
+	Android app mein connection complete karne ki guidance
+	Availability runtime par check hogi; sirf Android version dekh kar connection successful assume nahi karenge. developer.android.com
+4. Member kaunsa data choose karega?
+Starting version mein:
+Data
+	App mein use
+	Steps
+	Daily activity summary
+	Distance
+	Recorded walking/running distance
+	Exercise sessions
+	Workout type, time aur duration
+	Active calories
+	Available activity-energy estimate
+	Weight, sleep aur heart rate baad mein separately enable kar sakenge. Active calories aur total calories alag metrics rahengi.
+Har option ke saath purpose likha hoga. Sirf selected, implemented features ki permissions request karenge. Pehle version mein read-only integration hogi; doosri apps ke records modify nahi karenge.
+5. Android permission popup
+Data select → Android permission screen → member allow/deny → app granted permissions check kare.
+Member kuch permissions allow aur kuch deny kar sakta hai.
+Example:
+Selection
+	Result
+	Steps allowed
+	Steps read ho sakein
+	Distance denied
+	Distance unavailable
+	Exercise allowed
+	Available exercise sessions read hon
+	Sab denied
+	Connection incomplete; baqi app normal
+	App requested permissions ko granted nahi samjhegi. Har read se pehle current permission check hogi.
+6. Backend par save karne ki consent
+Phone permission milne ke baad separate app consent hogi:
+“Kya selected activity summaries aapke OXGEN account mein save ki ja sakti hain, taake aap web par bhi history dekh sakein?”
+Member ko data types, purpose aur retention policy dikhayenge.
+* Consent mile → selected summaries upload.
+* Consent na mile → backend upload nahi; phone par available local view ho sakta hai.
+* Consent version aur acceptance time save honge.
+* Health Connect permission ko trainer-sharing consent nahi samjhenge.
+7. Trainer sharing separate hogi
+Share with Trainer → assigned trainer ka naam → data categories choose → Confirm.
+Choice
+	Result
+	Sharing off
+	Trainer ko synced fitness data nahi
+	Steps/workouts only
+	Trainer sirf selected categories dekhe
+	Trainer assigned nahi
+	Data member ke liye; sharing baad mein configure
+	Trainer change ho
+	Naye trainer ke liye fresh sharing confirmation
+	Member connection rakhe aur trainer sharing band kare—yeh allowed hoga.
+8. First connection ke baad
+1. App granted data types verify karegi.
+2. Available records ka initial read karegi.
+3. Chosen period ki summaries preview karegi.
+4. Upload consent ho toh backend par save karegi.
+5. Connection status aur last successful sync show karegi.
+Example:
+Connection card
+	Value
+	Status
+	Connected — limited permissions
+	Allowed
+	Steps, exercise
+	Trainer sharing
+	Steps only
+	Last synced
+	5 October, 2:00 PM
+	Actions
+	Sync Now / Manage Permissions / Disconnect
+	Permission milna aur data milna alag hain. Empty result par “No available data” dikhega; automatically zero steps nahi.
+Older history ke access par additional permission lag sakti hai. Background reading bhi extra permission aur feature availability par depend karti hai. developer.android.com
+9. Background access ka flow
+Starting version mein app open hone par sync + Sync Now rakhenge.
+Background sync add karne par separate explanation:
+“App band hone par bhi available activity updates read karne ki permission dein?”
+Member deny kare toh foreground sync chalegi. Background permission ke bawajood fixed-minute ya continuous live updates guarantee nahi karenge; device scheduling bhi affect karti hai.
+10. Permission revoke/disconnect/delete
+Teen separate controls honge:
+Action
+	Effect
+	Stop Trainer Sharing
+	Trainer access band; member history available
+	Disconnect / Stop Sync
+	Future reads/uploads stop; existing backend history retained
+	Delete Synced History
+	OXGEN mein imported records/summaries remove; source-app data unchanged
+	Android settings se permission revoke ho toh app next check par affected reads stop karegi aur status update karegi. Backend ko revocation detect/report hone tak purani saved history ka pata rahega; Android permission revoke hona automatically server history delete nahi karta.
+Disconnect screen par Health Connect permissions manage/revoke karne ka link bhi hoga. Deletion policy active records aur backups ke treatment ko clearly explain karegi.
+11. Backend aur account security
+Record
+	Purpose
+	Connection status
+	Enabled/disconnected aur last device-reported permissions
+	Upload consent
+	Allowed data types, purpose/version aur time
+	Trainer-sharing consent
+	Kaunsa trainer kya dekh sakta hai
+	Sync metadata
+	Last success, source device aur errors
+	Imported summaries
+	Approved activity information
+	Android permission ka actual authority phone hai; database mein saved permission status sirf reported state hoga.
+Logout/account switch par pending sync stop hogi. Previous member ka device data doosre account mein upload nahi hona chahiye. Upload APIs current session aur account consent dono verify karengi.
+12. Implementation aur checks
+1. Connect screen + device availability.
+2. Selected read permissions + partial denial handling.
+3. Backend-upload consent.
+4. Trainer-sharing controls.
+5. Initial read + status/last sync.
+6. Disconnect, revoke detection aur deletion.
+7. Background access baad mein.
+Verify karenge: denied category upload na ho, sharing off par trainer access na mile, empty data zero na bane, aur account switch se previous member ka data leak na ho.
+
+
+
+
+“Activity Sync + History” connection ke baad ka feature hai: phone par available, permitted fitness data app read karegi → approved summaries backend mein save hongi → member daily/weekly history dekhega.
+1. Sync kab hogi?
+Trigger
+	Behavior
+	First connection
+	Selected recent period ka initial sync
+	Activity screen open
+	Zaroorat ho toh latest data refresh
+	Sync Now
+	Member manually refresh kare
+	Internet reconnect
+	Pending upload retry
+	Background sync
+	Additional permission/support ho toh scheduled attempts
+	Pehle version mein app open + Sync Now rakhenge. Background sync baad mein add hogi; continuous live tracking promise nahi karenge.
+2. Actual sync ka complete flow
+1. Member session, connection aur upload consent check.
+2. Phone par current data permissions verify.
+3. Health Connect se selected period ke available records read.
+4. Data types, units, timestamps aur sources normalize.
+5. Overlapping sources ko handle karke summaries calculate.
+6. Backend ko authenticated batch upload.
+7. Backend consent aur duplicate checks kare.
+8. Summary save/update ho.
+9. Successful acknowledgement ke baad sync checkpoint update ho.
+10. Screen par Last synced aur results show hon.
+Phone par read successful aur backend upload successful alag stages hain. Upload fail ho toh “Sync complete” nahi dikhayenge.
+3. Kaunsa data save hoga?
+Metric
+	Daily history
+	Steps
+	Available daily total
+	Distance
+	Recorded distance, km mein
+	Active calories
+	Available activity-energy estimate
+	Exercise sessions
+	Type, start/end, duration
+	Data coverage
+	Kis source/period se information available
+	Sync metadata
+	Last update, permission/source status
+	Aiven ki space bachane ke liye daily summaries aur essential workout metadata rakhenge. High-frequency sensor samples permanently store karna starting scope mein nahi hoga.
+4. Same activity do sources se aaye toh?
+Example: phone aur watch dono same walk ke steps record karein.
+Dono totals blindly add nahi karenge, warna activity double count ho sakti hai.
+* Supported aggregation/deduplication behavior use karenge.
+* Metric ke mutabiq source precedence aur overlap rules define honge.
+* Workout sessions ko source + record identifier se identify karenge.
+* Daily summary dobara calculate ho toh old total replace/update hoga; dobara add nahi.
+Example: yesterday 6,000 steps save the; updated source 6,500 dikhata hai → yesterday ka total 6,500, 12,500 nahi.
+5. Late updates aur deleted records
+Fitness sources baad mein records correct/add/delete kar sakte hain. Isliye sync sirf “ab se aage” read nahi karegi.
+Situation
+	Handling
+	Kal ka workout aaj source mein aaya
+	Kal ki history update
+	Source ne steps correct kiye
+	Affected daily total recalculate
+	Workout delete hua
+	Imported reference remove aur summary update
+	Sync checkpoint invalid/unavailable
+	Bounded period dobara read/reconcile
+	Recent days ka recheck aur available change tracking use karenge. Purani history complete hone ka claim tabhi hoga jab woh period actually read/reconcile hua ho.
+6. Member ki Activity screen
+Dashboard → Activity → Today / Week / Month / Custom range.
+Screen element
+	Kya dikhega?
+	Daily cards
+	Steps, distance, active calories
+	Trend chart
+	Available daily values
+	Workout list
+	Recorded exercise sessions
+	Weekly summary
+	Totals aur available-day count
+	Source label
+	Connected source information
+	Last synced
+	Backend tak latest successful sync
+	Status notice
+	Missing permission, stale data ya pending upload
+	Sync Now
+	Manual refresh
+	7. Weekly summary ka example
+Metric
+	Example
+	Steps — available days
+	42,000
+	Distance
+	28 km
+	Exercise sessions
+	3
+	Recorded workout duration
+	135 minutes
+	Days with steps data
+	6 of 7
+	Average steps 42,000 ÷ 6 = 7,000 per available day hoga. Missing seventh day ko zero maan kar average nahi nikaalenge.
+Workout duration overlap ho toh duplicate sessions handle karenge. Calories estimates ko exact food intake ya confirmed calorie deficit nahi kahenge.
+8. Zero, missing aur stale data
+State
+	Display
+	Source reports zero
+	0, available coverage ke saath
+	No records available
+	No data
+	Permission denied
+	Permission required
+	Backend upload pending
+	Not synced
+	Purana saved data
+	Value + Last synced date
+	Source read fail
+	Error + Retry; previous value preserve
+	Aaj ki summary “Today so far” hogi. Last synced time recent hone se source ka poore din ka data complete assume nahi karenge.
+9. Dates aur travel
+Records ke actual timestamps preserve honge. Starting reporting timezone Asia/Karachi hogi, aur daily/weekly charts par yeh clear rahega.
+Midnight cross karne wale workouts ka session ek record rahega; daily duration breakdown consistent boundary rules use karega. Phone timezone change hone se same records duplicate nahi banenge.
+10. Internet band ho toh
+Phone read ho gaya, internet nahi:
+1. Approved pending upload device par protected local queue mein rahega.
+2. Screen “Upload pending” dikhayegi.
+3. Reconnect par session aur consent dobara check honge.
+4. Same batch retry hogi.
+5. Backend acknowledgement ke baad queue clear hogi.
+Logout/account switch par previous member ki queue upload nahi hogi. Consent revoke ya data-delete request par affected pending uploads bhi remove/invalidate honge.
+11. Trainer aur privacy
+Trainer sirf currently assigned member ki explicitly shared categories dekhega.
+* Member sync kare lekin sharing off rakhe → trainer access nahi.
+* Sharing revoke ho → future trainer API requests block.
+* Permissions kam ho jayein → affected future reads stop.
+* Disconnect ho → future sync stop; saved history policy ke mutabiq retained.
+* Delete synced history ho → backend data remove aur old retries block; explicit reconnect/new consent ke baghair history reimport nahi.
+Member ke manual workout logs aur synced workouts source-labelled rahenge; ek ko doosre ka duplicate completion automatically nahi samjhenge.
+12. Backend implementation aur verification
+Record
+	Purpose
+	Sync batches/checkpoints
+	Progress, retries aur source reconciliation
+	Daily summaries
+	Member/date/metric totals + coverage
+	Exercise references
+	Source record identity aur updates
+	Connection/consent version
+	Allowed uploads aur revoked access
+	Sync errors
+	Useful status, health values ko logs mein expose kiye baghair
+	Backend batch size, date range, units aur ownership validate karega. Unique keys + transactions se retries idempotent hongi. Yeh member-device data hoga; attendance ya payment entitlement ka trusted proof nahi.
+Implementation:
+1. Foreground read → daily summary → backend save.
+2. Activity history + weekly comparison.
+3. Retry/deduplication + late-update reconciliation.
+4. Consent revocation/deletion handling.
+5. Background sync.
+Verify karenge: same batch do baar se totals na badhein, missing day zero na bane, corrected records update hon, failed upload checkpoint advance na kare aur revoked consent ke baad queued data save na ho.
+
+
+
+
+23. Trainer activity insights
+Trainer login → My Members → member → Activity Insights → period select → trends review → feedback ya plan update.
+1. Trainer screen par kya dikhega?
+Sirf currently assigned member ki allowed categories dikhengi.
+Section
+	Information
+	Steps
+	Available daily totals aur weekly trends
+	Distance
+	Recorded distance
+	Exercise sessions
+	Type, date aur recorded duration
+	Active calories
+	Available estimate
+	Progress
+	Weight/measurements, agar separately shared hon
+	Workout adherence
+	Assigned workout ke member-reported logs
+	Data status
+	Last sync, missing days aur available sources
+	Synced exercise aur assigned workout completion separate rahenge. Watch par workout record hone se assigned exercises automatically complete mark nahi hongi.
+2. Trainer ki members list
+Member
+	Sharing
+	Latest sync
+	Action
+	Ahmed
+	Steps + workouts
+	Today
+	View insights
+	Sara
+	Workouts only
+	Yesterday
+	View permitted data
+	Bilal
+	Sharing off
+	—
+	Activity access unavailable
+	Sharing off ho toh trainer ko permission request ka option mil sakta hai. Member approve karega tab access milega; trainer khud sharing enable nahi karega.
+3. Weekly comparison kaise hogi?
+Example:
+Metric
+	Previous week
+	Current week
+	Steps per available day
+	6,000
+	7,000
+	Days with steps data
+	7/7
+	4/7
+	Recorded workouts
+	3
+	2
+	Recorded workout duration
+	120 min
+	90 min
+	Trainer ko coverage saath dikhegi. 4 din ke data ko complete 7-day record samajh kar conclusion nahi nikaalenge.
+Missing records par “No data” dikhega. Member inactive tha, workout miss kiya ya diet follow nahi ki—yeh automatically assume nahi hoga.
+4. Plan adjust karne ka flow
+1. Trainer period aur available data review kare.
+2. Member ke goals, feedback aur current plan dekhe.
+3. Observation note kare.
+4. Suggest Change ya Update Workout/Diet Plan choose kare.
+5. New version draft kare.
+6. Reason aur effective date enter kare.
+7. Publish kare.
+8. Member ko notification mile.
+Example: member daily walking bhi karta hai aur workout feedback mein fatigue mention karta hai → trainer context review karke routine adjust kar sakta hai.
+Activity totals se automatic diet prescription ya workout increase nahi hoga. Starting version mein trainer final decision karega.
+5. Feedback aur observations
+Field
+	Purpose
+	Reviewed period
+	Kaunse dates dekhe
+	Observation
+	Trainer ka written assessment
+	Member feedback
+	Related context
+	Suggested action
+	Follow-up ya plan change
+	Related plan version
+	Kis programme mein adjustment hua
+	Member-facing feedback aur internal coaching note clearly separate honge. Restricted information ko shared note mein copy karke permission controls bypass nahi karenge.
+6. Alerts ka starting scope
+Useful operational notices rakhenge:
+* Sync purani hai.
+* Data permission kam ho gayi.
+* Member feedback review pending hai.
+* Scheduled plan review due hai.
+“No data” ko “member lazy/inactive” alert nahi banayenge. Calories estimates se exact energy deficit infer nahi karenge.
+7. Access revoke ya trainer change ho
+* Sharing revoke hote hi trainer ki new API requests block hongi.
+* Open screen par restricted data clear/refetch hoga.
+* Trainer reassignment par old trainer access lose karega.
+* New trainer ko fresh sharing consent chahiye.
+* Fitness-data export default disabled rahega.
+Jo information trainer pehle dekh chuka ya manually capture kar chuka hai, usko technically “unsee” nahi karwa sakte. Isliye unnecessary downloads/copies avoid karenge.
+8. Backend implementation
+Har insights request par backend verify karega:
+Valid trainer session → current assignment → active sharing consent → allowed categories/date range.
+Responses mein sirf permitted fields aayengi. Charts existing summaries se calculate hongi; private data unnecessarily duplicate nahi karenge.
+Review records mein trainer, period, feedback aur linked plan version save hoga. Sharing revocation par affected cached responses invalidate hongi.
+________________
+
+
+24. Sharing + disconnect controls
+Member → Profile → Privacy & Fitness Data → permissions/sharing/history manage kare.
+1. Teen controls separate hongi
+Control
+	Kya decide karega?
+	Phone read permissions
+	OXGEN phone se kya read kar sakta hai
+	OXGEN upload consent
+	Kya data backend mein save ho sakta hai
+	Trainer sharing
+	Saved data kaunsa trainer dekh sakta hai
+	Ek permission milne se baqi permissions automatically grant nahi hongi.
+2. Privacy screen par kya dikhega?
+Item
+	Display
+	Connection
+	Connected / disconnected
+	Allowed phone data
+	Steps, workouts, etc.
+	Backend saving
+	Enabled categories
+	Assigned trainer
+	Trainer name
+	Shared categories
+	Member-selected categories
+	Shared history range
+	Example: consent date onward ya selected past period
+	Last sync
+	Latest successful upload
+	Actions
+	Manage, stop sharing, disconnect, delete
+	Default trainer sharing Off hogi. Progress photos aur measurements ke controls activity categories se separately labelled honge.
+3. Sharing enable karne ka flow
+Share with Trainer → trainer name → categories → history range → preview → Confirm.
+Example:
+Choice
+	Member selection
+	Trainer
+	Bilal
+	Steps
+	Share
+	Workouts
+	Share
+	Active calories
+	Do not share
+	Past history
+	Last 30 days
+	Future updates
+	Share while consent remains active
+	Confirmation ke baad consent version, trainer, categories, date range aur time save honge.
+Agar trainer assigned nahi toh sharing activate nahi hogi. Member baad mein assignment hone par choose kar sakega.
+4. Sharing revoke karne ka flow
+Stop Trainer Sharing → effects preview → Confirm.
+* Trainer ka future access band.
+* Member ki own history available.
+* Phone sync/backend saving continue, agar unki consent active hai.
+* Pending sharing-request notifications update.
+* Trainer ko generic access-status notice; private reason bhejna required nahi.
+Member sirf ek category bhi revoke kar sakega—steps band, workouts shared reh sakte hain.
+5. Disconnect ka flow
+Disconnect Fitness Data → explanation → Confirm.
+Disconnect hone par:
+1. Future sync/upload disable.
+2. Pending local batches discard/invalidate.
+3. Trainer activity sharing default revoke.
+4. Backend connection disconnected mark.
+5. Existing saved history member ke liye retained.
+6. Phone permissions revoke/manage karne ka option.
+Disconnect se old history automatically delete nahi hogi. Confirmation screen par yeh clear hoga.
+6. Delete synced history ka flow
+Delete Synced Data → scope choose → preview → confirm.
+Scope
+	Result
+	Selected date range
+	Us period ka imported data remove
+	Selected categories
+	Example: sirf steps history
+	All synced fitness history
+	Saari imported activity remove
+	Deletion:
+* Backend imported records aur affected summaries remove/recalculate karegi.
+* Related app caches aur pending uploads clear karegi.
+* Source app/Health Connect ka original data unchanged rahega.
+* Manual workout logs, fees, membership aur receipts unchanged rahenge.
+* Audit mein deletion action/scope rahega; deleted health values ki copy nahi.
+Purane retries deleted data dobara restore nahi karenge. Connection/consent version aur deletion boundaries check hongi. Selected history dobara import karne ke liye explicit member action chahiye.
+Backups mein data policy ki retention expiry tak reh sakta hai; restore process deletion records dobara apply karega. UI active-data deletion aur backup retention clearly distinguish karegi.
+7. Android settings se permission band ho
+App next permission check par affected reads stop karegi aur member ko status dikhayegi.
+Phone permission revoke hone se already uploaded history automatically delete nahi hoti. Member OXGEN privacy screen se Stop Sharing/Delete History separately kar sakega.
+Agar backend ko phone revocation abhi report nahi hui, backend ko turant us change ka pata nahi hoga.
+8. Reconnect aur account change
+Situation
+	Behavior
+	Reconnect
+	Availability, phone permissions aur upload consent review
+	Previous trainer sharing
+	Automatically restore nahi
+	Old history reimport
+	Explicit range/consent required
+	Logout
+	Device uploads stop; account-linked queue clear
+	Different account login
+	Fresh connection confirmation; previous account data upload nahi
+	Trainer reassignment
+	New trainer sharing off until member approves
+	9. Backend records aur verification
+Record
+	Purpose
+	Consent versions
+	Kis purpose/category ki permission active hai
+	Trainer-sharing grants
+	Trainer, categories aur date boundaries
+	Connection state
+	Sync enabled/disabled
+	Deletion requests/boundaries
+	Scope, processing status aur reimport protection
+	Privacy audit
+	Grant/revoke/delete actions
+	Backend upload par upload consent aur trainer read par sharing consent check karega. Sirf settings page ke toggles par depend nahi karega.
+Verify karenge: old trainer access lose kare, category revoke response se data remove kare, disconnect pending upload block kare, deleted history retry se return na ho aur reconnect sharing silently restore na kare.

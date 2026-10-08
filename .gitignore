@@ -1,0 +1,42 @@
+# Local credentials and service configuration
+**/.env
+**/.env.*
+!**/.env.example
+**/*firebase*.json
+**/google-services.json
+**/GoogleService-Info.plist
+**/*.pem
+**/*.key
+**/*.jks
+**/*.p12
+**/*.p8
+**/*.mobileprovision
+
+# Dependencies, generated files and test artifacts
+**/node_modules/
+**/.next/
+**/.expo/
+**/.verify-export/
+**/.gym-cache/
+**/dist/
+**/build/
+**/coverage/
+**/*.tsbuildinfo
+**/*.log
+**/.claude/
+**/.codex/
+**/.agents/
+/mobile/android/
+/mobile/ios/
+/web/src/generated/prisma/
+
+# Historical copies and local previews
+/ui-backup*/
+/ui-preview/
+/audit-retest-*/
+/.local-git/
+**/cookies*.txt
+/web/*.jpg
+/web/*.png
+Thumbs.db
+.DS_Store

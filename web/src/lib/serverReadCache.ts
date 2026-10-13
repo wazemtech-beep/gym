@@ -77,7 +77,7 @@ export function withReadCache<T extends Request, A extends unknown[]>(handler: (
     } catch (cause) {
       const code = cause && typeof cause === "object" && "code" in cause ? String(cause.code) : "";
       const message = cause instanceof Error ? cause.message : "";
-      const busy = ["P1001", "P1002", "P1017", "P2024", "P2037"].includes(code) || /too many.*connections|remaining connection slots|connection pool/i.test(message);
+      const busy = ["P1001", "P1002", "P1017", "P2024", "P2037", "53300", "57P01", "08006"].includes(code) || /too many.*connections|remaining connection slots|connection pool|connection.*timeout|timeout.*connection|transaction.*(?:expired|timed out)/i.test(message);
       console.error("API_REQUEST_FAILED", new URL(request.url).pathname, code || (cause instanceof Error ? cause.name : "Unknown error"));
       return Response.json({ success: false, error: busy ? "Database busy hai. Thori dair baad dobara try karein." : "Request process nahi ho saki. Dobara try karein." }, { status: busy ? 503 : 500, headers: { "Cache-Control": "no-store", ...(busy ? { "Retry-After": "10" } : {}) } });
     }

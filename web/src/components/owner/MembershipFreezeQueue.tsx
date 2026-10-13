@@ -5,6 +5,13 @@ import { useEffect, useState } from "react";
 
 type Request = { id: string; requestedDays: number; reason: string; gymMember: { fullName: string; memberId: string }; membership: { planName: string } };
 
+async function fetchRequests(fresh = false): Promise<Request[]> {
+  const response = await apiFetch("/api/v1/membership/freeze-requests?status=PENDING", fresh ? { cache: "reload" } : undefined);
+  const data = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error || "Could not load freeze requests.");
+  return data.data || [];
+}
+
 export default function MembershipFreezeQueue() {
   const readCacheVersion = useReadCacheVersion();
   const [rows, setRows] = useState<Request[]>([]);
@@ -12,16 +19,18 @@ export default function MembershipFreezeQueue() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, string>>({});
-  const load = async () => {
+  const load = async (fresh = false) => {
     try {
-      const response = await apiFetch("/api/v1/membership/freeze-requests?status=PENDING");
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "Could not load freeze requests.");
-      setRows(data.data || []);
+      setRows(await fetchRequests(fresh));
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load freeze requests."); }
   };
-  useEffect(() => { void load(); }, [readCacheVersion]);
+  useEffect(() => {
+    let active = true;
+    void fetchRequests().then(data => { if (active) { setRows(data); setError(""); } })
+      .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Could not load freeze requests."); });
+    return () => { active = false; };
+  }, [readCacheVersion]);
   const review = async (row: Request, action: "APPROVE" | "REJECT") => {
     if (action === "REJECT" && !notes[row.id]?.trim()) { setError("Enter a reason for declining this request."); return; }
     setBusy(row.id);
@@ -32,6 +41,7 @@ export default function MembershipFreezeQueue() {
         body: JSON.stringify({ action, reviewNotes: notes[row.id], freezeStartDate: dates[row.id] || undefined }),
       });
       const data = await response.json();
+      if (response.status === 409) await load(true);
       if (!response.ok || !data.success) throw new Error(data.error || "Could not review this request.");
       await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not review this request."); }

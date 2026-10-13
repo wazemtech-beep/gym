@@ -137,9 +137,9 @@ export async function validateSession(token: string) {
     return null;
   }
 
-  const context = await getGymAuth().$context;
-  const librarySession = await context.internalAdapter.findSession(token);
-  if (!librarySession || librarySession.session.expiresAt <= new Date()) return null;
+  // Better Auth's Prisma adapter uses this same Session row. Its second
+  // findSession call only reread the already-validated session/user; expiry,
+  // revocation, activation and current permission checks above remain live.
 
   return {
     session,

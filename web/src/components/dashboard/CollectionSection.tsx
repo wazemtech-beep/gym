@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch } from "@/lib/apiFetch";
+import { formatKarachiPaymentDate } from "@/lib/displayDates";
 
 import { useState } from "react";
 import {
@@ -165,14 +166,14 @@ export default function CollectionSection({
       {/* Financial overview */}
       <div className={styles.metricGrid} aria-busy={loading}>
         {[
-          { label: "Outstanding dues", value: "Rs. " + metrics.totalOutstandingDues.toLocaleString(), icon: DollarSign, color: "var(--text-main)", surface: "var(--bg-surface)" },
-          { label: "Overdue dues", value: "Rs. " + metrics.totalOverdue.toLocaleString(), icon: Clock, color: "var(--danger)", surface: "var(--danger-soft)" },
-          { label: "Active members", value: metrics.activeMembersCount.toLocaleString(), icon: CheckCircle2, color: "var(--accent-primary)", surface: "var(--accent-soft)" },
-          { label: "Net collection", value: "Rs. " + metrics.netCollection.toLocaleString(), icon: DollarSign, color: "var(--accent-primary)", surface: "var(--accent-soft)", caption: "Received − refunds" },
-          { label: "Cash", value: "Rs. " + metrics.cashReceived.toLocaleString(), icon: TrendingUp, color: "var(--blue-primary)", surface: "var(--blue-soft)" },
-          { label: "Confirmed transfers", value: "Rs. " + metrics.bankReceived.toLocaleString(), icon: CheckCircle2, color: "var(--accent-secondary)", surface: "var(--accent-soft)" },
-          { label: "Refunds", value: "Rs. " + metrics.totalRefunds.toLocaleString(), icon: RotateCcw, color: "var(--danger)", surface: "var(--danger-soft)" },
-          { label: "Pending transfers", value: metrics.pendingTransfersCount.toLocaleString(), icon: Clock, color: "var(--amber-primary)", surface: "var(--amber-soft)", caption: "Rs. " + metrics.pendingTransfersAmount.toLocaleString() + " awaiting verification" },
+          { label: "Outstanding dues", value: "Rs. " + metrics.totalOutstandingDues.toLocaleString("en-US"), icon: DollarSign, color: "var(--text-main)", surface: "var(--bg-surface)" },
+          { label: "Overdue dues", value: "Rs. " + metrics.totalOverdue.toLocaleString("en-US"), icon: Clock, color: "var(--danger)", surface: "var(--danger-soft)" },
+          { label: "Active members", value: metrics.activeMembersCount.toLocaleString("en-US"), icon: CheckCircle2, color: "var(--accent-primary)", surface: "var(--accent-soft)" },
+          { label: "Net collection", value: "Rs. " + metrics.netCollection.toLocaleString("en-US"), icon: DollarSign, color: "var(--accent-primary)", surface: "var(--accent-soft)", caption: "Received − refunds" },
+          { label: "Cash", value: "Rs. " + metrics.cashReceived.toLocaleString("en-US"), icon: TrendingUp, color: "var(--blue-primary)", surface: "var(--blue-soft)" },
+          { label: "Confirmed transfers", value: "Rs. " + metrics.bankReceived.toLocaleString("en-US"), icon: CheckCircle2, color: "var(--accent-secondary)", surface: "var(--accent-soft)" },
+          { label: "Refunds", value: "Rs. " + metrics.totalRefunds.toLocaleString("en-US"), icon: RotateCcw, color: "var(--danger)", surface: "var(--danger-soft)" },
+          { label: "Pending transfers", value: metrics.pendingTransfersCount.toLocaleString("en-US"), icon: Clock, color: "var(--amber-primary)", surface: "var(--amber-soft)", caption: "Rs. " + metrics.pendingTransfersAmount.toLocaleString("en-US") + " awaiting verification" },
         ].map(({ label, value, icon: Icon, color, surface, caption }) => (
           <div key={label} className={`${styles.metricCard} ${label === "Net collection" ? styles.featuredCard : ""} ${label === "Outstanding dues" ? styles.duesCard : ""}`}>
             <div className={styles.metricTop}>
@@ -303,8 +304,7 @@ export default function CollectionSection({
                       </span>
                     </td>
                     <td style={{ padding: "14px", color: "var(--text-muted)" }}>
-                      {new Date(p.paymentDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })},{" "}
-                      {new Date(p.paymentDate).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
+                      {formatKarachiPaymentDate(p.paymentDate)}
                     </td>
                     <td style={{ padding: "14px" }}>
                       <span
@@ -324,7 +324,7 @@ export default function CollectionSection({
                       {p.receivingAccount?.displayName || p.referenceNumber || "Desk Cash"}
                     </td>
                     <td style={{ padding: "14px", fontWeight: 700, fontSize: "0.95rem", color: "var(--text-main)" }}>
-                      Rs. {p.amount.toLocaleString()}
+                      Rs. {p.amount.toLocaleString("en-US")}
                     </td>
                     <td style={{ padding: "14px", color: "var(--text-muted)", fontSize: "0.82rem" }}>
                       {p.recordedBy.name}

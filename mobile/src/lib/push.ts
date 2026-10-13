@@ -11,7 +11,7 @@ export async function enablePush(session: string) {
   if (!Device.isDevice || Platform.OS === 'web') throw new Error('Notifications need a physical phone and a development or release build.');
   if (!Constants.expoConfig?.extra?.[Platform.OS === 'android' ? 'firebaseConfiguredAndroid' : 'firebaseConfiguredIos']) throw new Error('Firebase phone configuration is needed before push notifications can be enabled.');
   const Notifications = await import('expo-notifications');
-  if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('default', { name: 'Gym updates', importance: Notifications.AndroidImportance.HIGH });
+  if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('oxgen_gym_alerts', { name: 'Gym updates', importance: Notifications.AndroidImportance.HIGH });
   const permissions = await Notifications.requestPermissionsAsync(); if (!permissions.granted) throw new Error('Allow notifications in your phone settings to receive gym updates.');
   const { getMessaging, getToken, registerDeviceForRemoteMessages } = await import('@react-native-firebase/messaging'), messaging = getMessaging();
   if (Platform.OS === 'ios') await registerDeviceForRemoteMessages(messaging);

@@ -1,4 +1,4 @@
-export type User = { id: string; name: string; email: string | null; memberId: string | null; role: string; mustChangePassword: boolean };
+export type User = { id: string; name: string; email: string | null; memberId: string | null; role: string; mustChangePassword: boolean; permissions?: Record<string, boolean> };
 export type Exercise = { id: string; name: string; type: string; sets: number | null; reps: string | null; restSeconds: number | null; instructions: string | null; demoVideoUrl: string | null };
 export type Dashboard = {
   isSetupPending: boolean;

@@ -9,7 +9,7 @@ import { ApiError } from '../lib/api';
 export function OfflineSync() {
   const { user, token, expire } = useSession(), cache = useQueryClient(), current = useRef(token);
   useEffect(() => {
-    current.current = token; if (!user || !token || user.mustChangePassword) return;
+    current.current = token; if (!user || !token || user.role !== 'MEMBER' || user.mustChangePassword) return;
     let active = true, busy = false;
     const sync = async () => {
       if (!active || busy) return; busy = true;

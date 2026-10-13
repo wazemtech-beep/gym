@@ -19,7 +19,10 @@ function Routes() {
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
     <Stack.Protected guard={!token}><Stack.Screen name="sign-in" /><Stack.Screen name="forgot-password" /><Stack.Screen name="register" /><Stack.Screen name="activate" /><Stack.Screen name="reset-password" /></Stack.Protected>
     <Stack.Protected guard={!!token && !!user?.mustChangePassword}><Stack.Screen name="change-password" /></Stack.Protected>
-    <Stack.Protected guard={!!token && !user?.mustChangePassword}><Stack.Screen name="(tabs)" /><Stack.Screen name="payments" /><Stack.Screen name="updates" /><Stack.Screen name="diet" /><Stack.Screen name="progress" /><Stack.Screen name="fitness" /><Stack.Screen name="attendance" /></Stack.Protected>
+    <Stack.Protected guard={!!token && !user?.mustChangePassword && user?.role === 'MEMBER'}><Stack.Screen name="(tabs)" /><Stack.Screen name="payments" /><Stack.Screen name="updates" /><Stack.Screen name="diet" /><Stack.Screen name="progress" /><Stack.Screen name="fitness" /><Stack.Screen name="attendance" /></Stack.Protected>
+    <Stack.Protected guard={!!token && !user?.mustChangePassword && user?.role === 'TRAINER'}><Stack.Screen name="trainer" /></Stack.Protected>
+    <Stack.Protected guard={!!token && !user?.mustChangePassword && (user?.role === 'OWNER' || user?.role === 'RECEPTIONIST')}><Stack.Screen name="admin" /></Stack.Protected>
+    <Stack.Protected guard={!!token && !user?.mustChangePassword}><Stack.Screen name="staff-account" /></Stack.Protected>
     <Stack.Screen name="privacy" />
   </Stack>;
 }

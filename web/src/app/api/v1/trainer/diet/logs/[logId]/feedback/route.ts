@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { Role } from "@prisma/client";
+import { effectiveTrainerAssignment } from "@/lib/trainerAccess";
 
 async function postHandler(
   req: NextRequest,
@@ -32,6 +33,10 @@ async function postHandler(
 
     if (!log) {
       return NextResponse.json({ success: false, error: "Meal log record nahi mila." }, { status: 404 });
+    }
+
+    if (current.user.role === Role.TRAINER && !await prisma.trainerAssignment.findFirst({ where: { gymMemberId: log.gymMemberId, trainerId: current.user.id, ...effectiveTrainerAssignment() } })) {
+      return NextResponse.json({ success: false, error: "Aap is member ke assigned trainer nahi hain." }, { status: 403 });
     }
 
     const updated = await prisma.dietAdherenceLog.update({

@@ -108,7 +108,6 @@ export async function sendPushNotification(
         notification: {
           channelId: "oxgen_gym_alerts",
           sound: "default",
-          clickAction: "FLUTTER_NOTIFICATION_CLICK",
         },
       },
       apns: {

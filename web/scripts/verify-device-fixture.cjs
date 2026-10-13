@@ -8,15 +8,41 @@ const db = new PrismaClient();
 const file = path.resolve(__dirname, '../../mobile/.expo/device-fixture.json');
 async function main() {
   try {
+    if (process.argv.includes('--inspect-push')) {
+      const fixture = JSON.parse(fs.readFileSync(file, 'utf8'));
+      console.log(JSON.stringify({ testDeviceTokens: await db.devicePushToken.count({ where: { userId: fixture.userIds[0] } }), testNotifications: await db.notification.count({ where: { userId: fixture.userIds[0] } }) }));
+      return;
+    }
+    if (process.argv.includes('--inspect')) {
+      const fixture = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const memberships = await db.membership.count({ where: { gymMemberId: fixture.memberId } });
+      const invoices = await db.invoice.count({ where: { gymMemberId: fixture.memberId } });
+      const measurement = await db.progressMeasurement.findFirst({ where: { gymMemberId: fixture.memberId }, select: { trainerFeedback: true } });
+      console.log(JSON.stringify({ isolatedMemberships: memberships, isolatedInvoices: invoices, phoneFeedbackSaved: measurement?.trainerFeedback === 'Device test review' }));
+      return;
+    }
     if (process.argv.includes('--cleanup')) {
       if (!fs.existsSync(file)) return;
       const fixture = JSON.parse(fs.readFileSync(file, 'utf8'));
       await db.auditLog.deleteMany({ where: { actorId: { in: fixture.userIds } } });
-      await db.gymMember.deleteMany({ where: { id: fixture.memberId } });
+      if (fixture.memberId) await db.gymMember.deleteMany({ where: { id: fixture.memberId } });
       await db.user.deleteMany({ where: { id: { in: fixture.userIds } } });
       fs.unlinkSync(file); console.log('Device fixture removed'); return;
     }
-    if (fs.existsSync(file)) { console.log('Existing isolated device fixture reused'); return; }
+    if (fs.existsSync(file)) {
+      const fixture = JSON.parse(fs.readFileSync(file, 'utf8'));
+      fixture.accounts ||= { MEMBER: fixture.identifier };
+      const passwordHash = await bcrypt.hash(fixture.password, 10);
+      const tag = fixture.identifier.split('@')[0];
+      for (const role of ['TRAINER', 'OWNER', 'RECEPTIONIST']) {
+        const email = tag + '-' + (role === 'TRAINER' ? 'coach' : role.toLowerCase()) + '@example.invalid';
+        const user = await db.user.upsert({ where: { email }, update: {}, create: { name: 'Device ' + role, email, role, passwordHash } });
+        if (!fixture.userIds.includes(user.id)) fixture.userIds.push(user.id);
+        fixture.accounts[role] = email;
+        fs.writeFileSync(file, JSON.stringify(fixture));
+      }
+      console.log('Isolated device accounts ready for all roles'); return;
+    }
     const tag = 'device-' + crypto.randomBytes(5).toString('hex'), password = 'Verify-' + crypto.randomBytes(12).toString('hex');
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await db.user.create({ data: { name: 'Phone Verification', email: tag + '@example.invalid', role: 'MEMBER', passwordHash } });
@@ -31,6 +57,13 @@ async function main() {
     await db.workoutPlan.create({ data: { title: 'Device strength plan', goal: 'Verification', status: 'PUBLISHED', gymMemberId: member.id, trainerId: trainer.id, workoutDays: { create: { title: 'Device training', dayOfWeek: weekday, exercises: { create: { name: 'Bodyweight squat', sets: 1, reps: '8', restSeconds: 30, instructions: 'Keep your back neutral.' } } } } } });
     await db.dietPlan.create({ data: { title: 'Device meal plan', goal: 'Verification', status: 'PUBLISHED', gymMemberId: member.id, trainerId: trainer.id, mealSlots: { create: { title: 'Breakfast', slotType: 'BREAKFAST', foodItems: 'Oats 50g' } } } });
     await db.progressMeasurement.create({ data: { gymMemberId: member.id, weightKg: 80, isBaseline: true } });
+    fixture.accounts = { MEMBER: user.email, TRAINER: trainer.email };
+    for (const role of ['OWNER', 'RECEPTIONIST']) {
+      const account = await db.user.create({ data: { name: 'Device ' + role, email: tag + '-' + role.toLowerCase() + '@example.invalid', role, passwordHash } });
+      fixture.userIds.push(account.id);
+      fixture.accounts[role] = account.email;
+      fs.writeFileSync(file, JSON.stringify(fixture));
+    }
     console.log('Isolated device fixture ready; credentials stored only in ignored local file');
   } finally { await db.$disconnect(); }
 }

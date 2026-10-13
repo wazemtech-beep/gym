@@ -16,5 +16,5 @@ export default function ChangePassword() {
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save password.'); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <Screen><Heading>Set your password</Heading><Text style={styles.muted}>Choose a new password before opening your member account.</Text><Card><Field label="New password" value={password} onChangeText={setPassword} secureTextEntry textContentType="newPassword" editable={!busy} /><Field label="Confirm password" value={confirm} onChangeText={setConfirm} secureTextEntry editable={!busy} /><ErrorNotice error={error} /><Button title="Save password" busy={busy} onPress={() => void submit()} /></Card></Screen>;
+  return <Screen><Heading>Set your password</Heading><Text style={styles.muted}>Choose a new password before opening your gym account.</Text><Card><Field label="New password" value={password} onChangeText={setPassword} secureTextEntry textContentType="newPassword" editable={!busy} /><Field label="Confirm password" value={confirm} onChangeText={setConfirm} secureTextEntry editable={!busy} /><ErrorNotice error={error} /><Button title="Save password" busy={busy} onPress={() => void submit()} /></Card></Screen>;
 }

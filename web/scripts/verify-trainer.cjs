@@ -15,16 +15,29 @@ async function main() {
   try {
     const password = 'Verify-' + crypto.randomBytes(12).toString('hex'), passwordHash = await bcrypt.hash(password, 10);
     async function user(role, suffix) { const u = await db.user.create({ data: { name: tag, email: tag + suffix + '@example.invalid', role, passwordHash } }); users.push(u.id); return u; }
-    const trainer = await user('TRAINER', 't'), outsider = await user('TRAINER', 'o'), memberUser = await user('MEMBER', 'm');
+    const trainer = await user('TRAINER', 't'), outsider = await user('TRAINER', 'o'), memberUser = await user('MEMBER', 'm'), ownerUser = await user('OWNER', 'a'), receptionUser = await user('RECEPTIONIST', 'r');
+    for (const account of [trainer, memberUser, ownerUser, receptionUser]) {
+      const mobile = await api('/api/auth/login', '', 'POST', { identifier: account.email, password });
+      check('unified mobile login returns token for ' + account.role, mobile.data?.user?.role === account.role && !!mobile.data?.token);
+      const response = await fetch(base + '/api/auth/me', { headers: { Authorization: 'Bearer ' + mobile.data?.token, 'X-Gym-Client': 'mobile', 'X-Gym-Fresh': '1' } });
+      const profile = await response.json();
+      check('bearer profile resolves role and permissions for ' + account.role, response.ok && profile.user?.role === account.role && typeof profile.permissions?.ATTENDANCE_MANAGE === 'boolean');
+    }
     const member = await db.gymMember.create({ data: { fullName: tag, memberId: tag, phone: '03000000000' } }); members.push(member.id);
     const foreign = await db.gymMember.create({ data: { fullName: tag, memberId: tag + 'foreign', phone: '03000000001' } }); members.push(foreign.id);
     async function login(u) { const r = await api('/api/auth/login', '', 'POST', { identifier: u.email, password, portal: u.role === 'MEMBER' ? 'member' : 'admin' }); check('login ' + u.role, r.data?.success); const cookie = r.response.headers.get('set-cookie')?.split(';')[0]; if (!cookie) throw Error('fixture login'); return cookie; }
     const cookie = await login(trainer), otherCookie = await login(outsider), memberCookie = await login(memberUser);
     const assignment = await db.trainerAssignment.create({ data: { gymMemberId: member.id, trainerId: trainer.id, assignedById: trainer.id, consentMeasurements: true } });
+    const mealLog = await db.dietAdherenceLog.create({ data: { gymMemberId: member.id, actualFood: 'Oats 50g' } });
     const reading = await db.progressMeasurement.create({ data: { gymMemberId: member.id, weightKg: 80, isBaseline: true } });
     const foreignReading = await db.progressMeasurement.create({ data: { gymMemberId: foreign.id, weightKg: 70 } });
     const prefix = '/api/v1/trainer/members/' + member.id;
     check('assigned member plans readable', (await api(prefix + '/plans', cookie)).response.ok);
+    check('assigned trainer reads meal logs', (await api(prefix + '/diet', cookie)).data?.data?.logs?.some(log => log.id === mealLog.id));
+    check('unassigned trainer meal feedback denied', (await api('/api/v1/trainer/diet/logs/' + mealLog.id + '/feedback', otherCookie, 'POST', { feedback: 'Denied' })).response.status === 403);
+    check('member cannot submit trainer meal feedback', (await api('/api/v1/trainer/diet/logs/' + mealLog.id + '/feedback', memberCookie, 'POST', { feedback: 'Denied' })).response.status === 403);
+    check('assigned trainer meal feedback saved', (await api('/api/v1/trainer/diet/logs/' + mealLog.id + '/feedback', cookie, 'POST', { feedback: 'Good portions' })).data?.success);
+    check('meal feedback preserves member log', (await db.dietAdherenceLog.findUnique({ where: { id: mealLog.id } })).actualFood === 'Oats 50g');
     check('unassigned trainer plans denied', (await api(prefix + '/plans', otherCookie)).response.status === 403);
     check('member cannot use trainer plans API', (await api(prefix + '/plans', memberCookie)).response.status === 403);
     check('assigned progress readable', (await api(prefix + '/progress', cookie)).data?.data?.consentGranted === true);
@@ -49,6 +62,7 @@ async function main() {
     await db.trainerAssignment.update({ where: { id: assignment.id }, data: { isActive: false } });
     check('inactive assignment blocks diet', (await api(prefix + '/diet', cookie)).response.status === 403);
     check('inactive assignment blocks plans', (await api(prefix + '/plans', cookie)).response.status === 403);
+    check('inactive assignment blocks meal feedback', (await api('/api/v1/trainer/diet/logs/' + mealLog.id + '/feedback', cookie, 'POST', { feedback: 'Denied' })).response.status === 403);
   } catch (e) { failed++; console.log('FAIL ' + (e.code || e.message)); }
   finally { await db.auditLog.deleteMany({ where: { actorId: { in: users } } }); await db.gymMember.deleteMany({ where: { id: { in: members } } }); await db.user.deleteMany({ where: { id: { in: users } } }); await db.$disconnect(); console.log('Fixture cleanup completed'); }
   console.log(JSON.stringify({ check: 'trainer-contract', passed, failed, emailsSent: 0 })); process.exitCode = failed ? 1 : 0;

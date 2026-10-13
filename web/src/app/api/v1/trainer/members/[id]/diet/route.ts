@@ -53,6 +53,8 @@ async function getHandler(
       data: {
         preferences: preferences || null,
         plans,
+        logs: await prisma.dietAdherenceLog.findMany({ where: { gymMemberId: id }, orderBy: { date: "desc" }, take: 30 }),
+        changeRequests: await prisma.auditLog.findMany({ where: { entityId: id, entityType: "GYM_MEMBER", action: "DIET_CHANGE_REQUESTED" }, select: { id: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 20 }),
       },
     });
   } catch (error: any) {

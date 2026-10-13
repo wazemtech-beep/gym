@@ -32,24 +32,25 @@ function SessionProvider({ children }: PropsWithChildren) {
     try {
       const saved = await readToken();
       if (!saved) return;
-      const result = await request<{ user: User }>('/api/auth/me', { token: saved });
-      if (result.user.role !== 'MEMBER') { await saveToken(null); return; }
-      setToken(saved); setUser(result.user);
+      const result = await request<{ user: User; permissions: Record<string, boolean> }>('/api/auth/me', { token: saved });
+      if (!['MEMBER', 'TRAINER', 'OWNER', 'RECEPTIONIST'].includes(result.user.role)) { await saveToken(null); return; }
+      setToken(saved); setUser({ ...result.user, permissions: result.permissions });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) await expire();
       else setRecoveryError(error instanceof Error ? error.message : 'Cannot restore your session.');
     } finally { setLoading(false); }
   }, [expire]);
   useEffect(() => { void Promise.resolve().then(restore); const sub = AppState.addEventListener('change', state => focusManager.setFocused(state === 'active')); return () => sub.remove(); }, [restore]);
-  const reloadUser = async () => { const result = await request<{ user: User }>('/api/auth/me', { token, fresh: true }); setUser(result.user); };
+  const reloadUser = async () => { const result = await request<{ user: User; permissions: Record<string, boolean> }>('/api/auth/me', { token, fresh: true }); setUser({ ...result.user, permissions: result.permissions }); };
   const signIn = async (identifier: string, password: string) => {
     if (operation.current) return; operation.current = true;
     let created: string | undefined;
     try {
-      const result = await request<{ token: string; user: User }>('/api/auth/login', { method: 'POST', body: { identifier: identifier.trim(), password, portal: 'member' } });
+      const result = await request<{ token: string; user: User }>('/api/auth/login', { method: 'POST', body: { identifier: identifier.trim(), password } });
       created = result.token;
-      if (result.user.role !== 'MEMBER' || !created) throw new ApiError('Please use your gym member account.', 403);
-      await saveToken(created); queryClient.clear(); setToken(created); setUser(result.user); setRecoveryError(null);
+      if (!['MEMBER', 'TRAINER', 'OWNER', 'RECEPTIONIST'].includes(result.user.role) || !created) throw new ApiError('This account cannot use the gym app.', 403);
+      const profile = await request<{ user: User; permissions: Record<string, boolean> }>('/api/auth/me', { token: created });
+      await saveToken(created); queryClient.clear(); setToken(created); setUser({ ...profile.user, permissions: profile.permissions }); setRecoveryError(null);
     } catch (error) { if (created) await request('/api/auth/logout', { token: created, method: 'POST', body: {} }).catch(() => {}); throw error; }
     finally { operation.current = false; }
   };

@@ -10,7 +10,7 @@ import { request } from '../lib/api';
 export function PushEvents() {
   const { token, user } = useSession(), cache = useQueryClient();
   useEffect(() => {
-    if (!token || !user || user.mustChangePassword || Platform.OS === 'web' || Constants.executionEnvironment === 'storeClient' || !Constants.expoConfig?.extra?.[Platform.OS === 'android' ? 'firebaseConfiguredAndroid' : 'firebaseConfiguredIos']) return;
+    if (!token || !user || user.role !== 'MEMBER' || user.mustChangePassword || Platform.OS === 'web' || Constants.executionEnvironment === 'storeClient' || !Constants.expoConfig?.extra?.[Platform.OS === 'android' ? 'firebaseConfiguredAndroid' : 'firebaseConfiguredIos']) return;
     let alive = true, starting = false, attached = false; const dispose: (() => void)[] = [];
     const refresh = () => { if (alive) void cache.invalidateQueries({ queryKey: ['member', user.id] }); };
     // Server links are never opened directly; route only to member-owned screens.
@@ -30,4 +30,3 @@ export function PushEvents() {
   }, [token, user, cache]);
   return null;
 }
-

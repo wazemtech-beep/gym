@@ -13,6 +13,8 @@ const ALL_ACTIONS: PermissionAction[] = [
   "WORKOUT_DIET_ASSIGN",
   "PROGRESS_ACTIVITY_VIEW",
   "GYM_SETTINGS",
+  "EXPENSES_MANAGE",
+  "ATTENDANCE_MANAGE",
 ];
 
 async function getHandler() {

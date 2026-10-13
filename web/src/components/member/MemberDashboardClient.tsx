@@ -796,7 +796,7 @@ export default function MemberDashboardClient({ initialData, section }: { initia
                 Date: {new Date(latestPayment.paymentDate).toLocaleDateString()} • Method: {latestPayment.method}
               </div>
               <a
-                href={latestPayment.receiptUrl}
+                href={`/api/v1/receipts/${encodeURIComponent(latestPayment.id)}/download`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-secondary"

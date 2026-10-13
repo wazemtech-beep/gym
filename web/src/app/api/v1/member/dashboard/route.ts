@@ -197,7 +197,7 @@ async function getHandler(req: NextRequest) {
           amount: latestPaymentRecord.amount,
           paymentDate: latestPaymentRecord.paymentDate,
           method: latestPaymentRecord.method,
-          receiptUrl: `/api/v1/receipts/${latestPaymentRecord.id}`,
+          receiptUrl: `/api/v1/receipts/${encodeURIComponent(latestPaymentRecord.id)}/download`,
         }
       : null;
 

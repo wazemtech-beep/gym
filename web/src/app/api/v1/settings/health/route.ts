@@ -9,7 +9,9 @@ async function getHandler(req: NextRequest) {
   let database = "Unavailable";
   try { await prisma.$queryRaw`SELECT 1`; database = "Connected"; } catch { /* Availability only; connection secrets are never returned. */ }
   const heartbeat = await prisma.auditLog.findFirst({ where: { action: "BACKGROUND_WORKER_HEARTBEAT" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }).catch(() => null);
-  return NextResponse.json({ success: true, database, smtp: process.env.SMTP_USER && process.env.SMTP_PASS ? "Configured" : "Not configured", push: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.FIREBASE_PROJECT_ID ? "Configured" : "Not configured", worker: heartbeat && Date.now() - heartbeat.createdAt.getTime() < 360000 ? "Recent heartbeat" : "No recent heartbeat", workerLastSeen: heartbeat?.createdAt || null, backups: "Not monitored by this application" }, { headers: { "Cache-Control": "private, no-store" } });
+  const cron = await prisma.runtimeState.findUnique({ where: { key: "scheduler:heartbeat" }, select: { updatedAt: true } }).catch(() => null);
+  const lastSeen = cron?.updatedAt || heartbeat?.createdAt;
+  return NextResponse.json({ success: true, database, smtp: process.env.SMTP_USER && process.env.SMTP_PASS ? "Configured" : "Not configured", push: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.FIREBASE_PROJECT_ID ? "Configured" : "Not configured", worker: lastSeen && Date.now() - lastSeen.getTime() < 360000 ? "Recent heartbeat" : "No recent heartbeat", workerLastSeen: lastSeen || null, backups: "Not monitored by this application" }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export const GET = withReadCache(getHandler);

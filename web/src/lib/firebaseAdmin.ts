@@ -6,19 +6,25 @@ import { prisma } from "@/lib/db";
 
 let isInitialized = false;
 
-function initFirebaseAdmin(): App | null {
+export function initFirebaseAdmin(): App | null {
   const existingApps = getApps();
   if (existingApps.length > 0) {
     return existingApps[0];
   }
 
   try {
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
     const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
     let credential = null;
 
-    if (serviceAccountPath) {
+    if (serviceAccountJson) {
+      const account = JSON.parse(serviceAccountJson);
+      if (!account.project_id || !account.client_email || !account.private_key) throw new Error("Incomplete Firebase Admin credential");
+      account.private_key = account.private_key.replace(/\\n/g, "\n");
+      credential = cert(account);
+    } else if (serviceAccountPath) {
       const resolvedPath = path.isAbsolute(serviceAccountPath)
         ? serviceAccountPath
         : path.resolve(/* turbopackIgnore: true */ process.cwd(), serviceAccountPath);

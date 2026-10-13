@@ -7,27 +7,36 @@ export default function ReadCacheBridge({ scope, children }: { scope: string; ch
   useLayoutEffect(() => { setReadCacheScope(scope); },[scope]);
   useEffect(() => {
     if (!scope) return;
-    let events: EventSource | null = null;
+    let poll: AbortController | null = null;
     let pendingLock: AbortController | null = null;
     let release: (() => void) | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let retryDelay = 5000;
     let disposed = false;
     const open = () => {
-      events?.close();
-      events = new EventSource("/api/v1/cache-sync");
-      events.onmessage = event => { try { retryDelay = 5000; updateReadRevision(JSON.parse(event.data).revision); } catch { disconnectReadCache(); } };
-      events.onerror = () => {
-        events?.close(); events = null; disconnectReadCache();
-        if (!disposed && !retryTimer && document.visibilityState === "visible" && navigator.onLine) {
-          retryTimer = setTimeout(() => { retryTimer = null; if (!disposed) open(); }, retryDelay);
-          retryDelay = Math.min(60000, retryDelay * 2);
-        }
-      };
+      if (disposed || document.visibilityState !== "visible" || !navigator.onLine) return;
+      poll?.abort();
+      const controller = new AbortController(); poll = controller;
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      void fetch("/api/v1/cache-sync", { cache: "no-store", signal: controller.signal })
+        .then(async response => {
+          if (!response.ok) throw new Error("Revision unavailable");
+          const data = await response.json();
+          if (controller.signal.aborted || disposed) return;
+          updateReadRevision(typeof data.revision === "string" ? data.revision : null);
+          retryDelay = 10000;
+        })
+        .catch(() => { if (poll === controller && !disposed) { disconnectReadCache(); retryDelay = Math.min(60000, retryDelay * 2); } })
+        .finally(() => {
+          clearTimeout(timeout);
+          if (poll !== controller || disposed) return;
+          poll = null;
+          if (document.visibilityState === "visible" && navigator.onLine) retryTimer = setTimeout(() => { retryTimer = null; open(); }, retryDelay);
+        });
     };
     const connect = () => {
       if (retryTimer) clearTimeout(retryTimer); retryTimer = null;
-      pendingLock?.abort(); release?.(); release = null; events?.close(); events = null;
+      pendingLock?.abort(); release?.(); release = null; poll?.abort(); poll = null;
       if (document.visibilityState !== "visible" || !navigator.onLine) { disconnectReadCache(); return; }
       requestReadCacheRevision();
       // One live connection per browser session; other tabs receive revisions
@@ -49,7 +58,7 @@ export default function ReadCacheBridge({ scope, children }: { scope: string; ch
     connect();
     document.addEventListener("visibilitychange",connect); window.addEventListener("online",connect); window.addEventListener("offline",connect);
     window.addEventListener("gym:read-cache-changed",refresh); document.addEventListener("click",click,true);
-    return () => { disposed = true; if (retryTimer) clearTimeout(retryTimer); pendingLock?.abort(); release?.(); events?.close(); disconnectReadCache(); document.removeEventListener("visibilitychange",connect); window.removeEventListener("online",connect); window.removeEventListener("offline",connect); window.removeEventListener("gym:read-cache-changed",refresh); document.removeEventListener("click",click,true); };
+    return () => { disposed = true; if (retryTimer) clearTimeout(retryTimer); pendingLock?.abort(); release?.(); poll?.abort(); disconnectReadCache(); document.removeEventListener("visibilitychange",connect); window.removeEventListener("online",connect); window.removeEventListener("offline",connect); window.removeEventListener("gym:read-cache-changed",refresh); document.removeEventListener("click",click,true); };
   },[scope,router]);
   return children;
 }

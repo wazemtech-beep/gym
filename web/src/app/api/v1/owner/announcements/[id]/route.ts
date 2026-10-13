@@ -2,8 +2,7 @@ import { withReadCache } from "@/lib/serverReadCache";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { NotificationCategory, Role } from "@prisma/client";
-import { dispatchNotification } from "@/lib/notifications";
+import { Role } from "@prisma/client";
 
 async function getHandler(
   req: NextRequest,
@@ -142,20 +141,19 @@ async function patchHandler(
         select: { userId: true },
       });
 
-      for (const n of existingNotifs) {
-        await dispatchNotification({
-          recipientUserId: n.userId,
+      const recipients = [...new Set(existingNotifs.map(n => n.userId))];
+      await prisma.notificationEvent.createMany({ skipDuplicates: true, data: recipients.map(userId => ({
+          recipientUserId: userId,
           eventType: "ANNOUNCEMENT_UPDATED",
           title: `Updated: ${updated.title}`,
           message: updated.content,
-          category: NotificationCategory.ANNOUNCEMENT,
+          category: "ANNOUNCEMENT",
           entityType: "ANNOUNCEMENT",
           entityId: updated.id,
           actionUrl: "/dashboard",
-          announcementId: updated.id,
-          dedupKey: `announcement-upd-v${newVersion}-${updated.id}-${n.userId}`,
-        });
-      }
+          dedupKey: `announcement-upd-v${newVersion}-${updated.id}-${userId}`,
+          metadata: { channels: updated.channels, attempts: 0, announcementId: updated.id },
+      })) });
     }
 
     return NextResponse.json({

@@ -2,18 +2,14 @@ import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
 async function main() {
-  const { applyMembershipLifecycle } = await import("../src/lib/membershipLifecycle");
-  const { runReminderScheduler, runScheduledAnnouncementWorker, processNotificationOutbox } = await import("../src/lib/notifications");
+  const { runScheduledWork } = await import("../src/lib/scheduledWork");
   let stopping = false;
   let lastHeartbeat = 0;
   process.once("SIGTERM", () => { stopping = true; });
   process.once("SIGINT", () => { stopping = true; });
   while (!stopping) {
     try {
-      await applyMembershipLifecycle();
-      await runReminderScheduler();
-      await runScheduledAnnouncementWorker();
-      await processNotificationOutbox();
+      await runScheduledWork();
       if (Date.now() - lastHeartbeat > 300000) { const { prisma } = await import("../src/lib/db"); await prisma.auditLog.create({ data: { actorName: "Background worker", action: "BACKGROUND_WORKER_HEARTBEAT", entityType: "SYSTEM" } }); lastHeartbeat = Date.now(); }
     } catch (error) { console.error("Background worker failed", error); }
     finally {

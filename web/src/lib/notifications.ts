@@ -8,6 +8,7 @@ import { createSmtpTransport } from "./smtpTransport";
 import { sendPushNotification } from "@/lib/firebaseAdmin";
 import type { Prisma } from "@prisma/client";
 import { generateReceiptPdf } from "@/lib/pdfGenerator";
+import { acquireJobLease, releaseJobLease } from "./jobLease";
 
 export interface DispatchNotificationParams {
   recipientUserId: string;
@@ -27,6 +28,15 @@ export interface DispatchNotificationParams {
 
 export async function enqueueNotification(tx: Prisma.TransactionClient, params: DispatchNotificationParams) {
   return tx.notificationEvent.create({ data: { recipientUserId: params.recipientUserId, eventType: params.eventType, title: params.title, message: params.message, category: params.category, entityType: params.entityType, entityId: params.entityId, actionUrl: params.actionUrl, dedupKey: params.dedupKey, metadata: { ...params.metadata, channels: params.channels || ["IN_APP", "EMAIL", "PUSH"], attempts: 0 }, processed: false } });
+}
+
+export async function deferNotification(params: DispatchNotificationParams) {
+  if (!params.dedupKey) throw new Error("Deferred notifications need an idempotency key");
+  const event = await prisma.notificationEvent.upsert({
+    where: { dedupKey: params.dedupKey }, update: {},
+    create: { recipientUserId: params.recipientUserId, eventType: params.eventType, title: params.title, message: params.message, category: params.category, entityType: params.entityType, entityId: params.entityId, actionUrl: params.actionUrl, dedupKey: params.dedupKey, metadata: { ...params.metadata, channels: params.channels || ["IN_APP", "EMAIL", "PUSH"], attempts: 0, announcementId: params.announcementId }, processed: false },
+  });
+  return { success: true, eventId: event.id, queued: true };
 }
 
 /**
@@ -50,6 +60,7 @@ export function sanitizeLockScreenMessage(title: string, message: string): { tit
  * Isolation guarantee: delivery errors NEVER throw or cancel business transactions.
  */
 export async function dispatchNotification(params: DispatchNotificationParams) {
+  let deliveryLease: { key: string; owner: string } | undefined;
   try {
     const {
       recipientUserId,
@@ -109,6 +120,20 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
           processed: false,
         },
       });
+    }
+
+    const leaseKey = `notification:${event.id}`;
+    const leaseOwner = await acquireJobLease(leaseKey);
+    if (!leaseOwner) return { success: true, queued: true, eventId: event.id };
+    deliveryLease = { key: leaseKey, owner: leaseOwner };
+    if ((await prisma.notificationEvent.findUnique({ where: { id: event.id }, select: { processed: true } }))?.processed) return { success: true, duplicate: true, eventId: event.id };
+    if (["ANNOUNCEMENT_PUBLISHED", "ANNOUNCEMENT_UPDATED"].includes(eventType) && entityId) {
+      const live = await prisma.announcement.findUnique({ where: { id: entityId }, select: { isPublished: true, publishAt: true, expiresAt: true } });
+      if (!live?.isPublished || (live.expiresAt && live.expiresAt <= new Date())) {
+        await prisma.notificationEvent.update({ where: { id: event.id }, data: { processed: true } });
+        return { success: true, skipped: true, eventId: event.id };
+      }
+      if (live.publishAt > new Date()) return { success: true, queued: true, eventId: event.id };
     }
 
     // 3. Fetch recipient user + preferences + devices
@@ -181,6 +206,8 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
     let emailError: string | null = null;
 
     const deliveryEmail = event.eventType === "EMAIL_CHANGE_VERIFICATION" ? event.metadata?.verificationEmail : user.email;
+    const siteOrigin = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+    const emailActionUrl = actionUrl?.startsWith("/") && siteOrigin ? new URL(actionUrl, siteOrigin).toString() : actionUrl;
     if (channels.includes("EMAIL") && allowEmail && emailStatus !== NotificationDeliveryStatus.ACCEPTED) {
       if (deliveryEmail) {
         const transporter = await createSmtpTransport();
@@ -209,7 +236,7 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
                     ${
                       actionUrl
                         ? `<div style="margin-top: 24px;">
-                            <a href="${actionUrl}" style="background: #f97316; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">View in App</a>
+                            <a href="${emailActionUrl}" style="background: #f97316; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">View in App</a>
                           </div>`
                         : ""
                     }
@@ -251,7 +278,7 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
         const tokens = user.deviceTokens.map((t: any) => t.token);
 
         // Check if Firebase service account or project is configured
-        if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.FIREBASE_PROJECT_ID) {
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.FIREBASE_PROJECT_ID) {
           try {
             const pushResult = await sendPushNotification(tokens, {
               title: sanitized.title,
@@ -301,6 +328,15 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
       });
     }
 
+    if (announcementId) {
+      const counts = await prisma.notification.groupBy({ by: ["emailStatus", "pushStatus"], where: { announcementId }, _count: { _all: true } });
+      await prisma.announcement.updateMany({ where: { id: announcementId }, data: {
+        emailSentCount: counts.reduce((n, row) => n + (row.emailStatus === "ACCEPTED" ? row._count._all : 0), 0),
+        emailFailedCount: counts.reduce((n, row) => n + (row.emailStatus === "FAILED" ? row._count._all : 0), 0),
+        pushSentCount: counts.reduce((n, row) => n + (row.pushStatus === "ACCEPTED" ? row._count._all : 0), 0),
+      } });
+    }
+
     // 8. Mark outbox event as processed
     await prisma.notificationEvent.update({
       where: { id: event.id },
@@ -319,6 +355,8 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
     console.error("DISPATCH_NOTIFICATION_ERROR:", error);
     // Return gracefully so business logic is not interrupted
     return { success: false, error: error.message };
+  } finally {
+    if (deliveryLease) await releaseJobLease(deliveryLease.key, deliveryLease.owner).catch(() => console.error("Notification lease cleanup deferred until expiry."));
   }
 }
 
@@ -327,7 +365,7 @@ export async function dispatchNotification(params: DispatchNotificationParams) {
  * Checks active memberships expiring in 7d or 1d, installments currently due or overdue.
  * Idempotent with Karachi timezone, re-verifies live database status before sending.
  */
-export async function runReminderScheduler(memberId?: string) {
+export async function runReminderScheduler(memberId?: string, options: { enqueueOnly?: boolean } = {}) {
   const results = {
     expiringProcessed: 0,
     installmentsProcessed: 0,
@@ -380,7 +418,7 @@ export async function runReminderScheduler(memberId?: string) {
           continue;
         }
 
-        await dispatchNotification({
+        await (options.enqueueOnly ? deferNotification : dispatchNotification)({
           recipientUserId: member.userId,
           eventType: "MEMBERSHIP_EXPIRING",
           title: `Membership Expiring in ${diffDays} Day${diffDays > 1 ? "s" : ""}`,
@@ -455,7 +493,7 @@ export async function runReminderScheduler(memberId?: string) {
         ? `Aapki Rs. ${balanceDue.toLocaleString()} ki installment ${dueDateStr} ko overdue ho chuki hai. Kripya reception par jama karwayein.`
         : `Aapki Rs. ${balanceDue.toLocaleString()} ki installment aaj (${dueDateStr}) due hai. Receipt ke liye online transfer ya cash jamayein.`;
 
-      await dispatchNotification({
+      await (options.enqueueOnly ? deferNotification : dispatchNotification)({
         recipientUserId: member.userId,
         eventType: "INSTALLMENT_DUE",
         title,

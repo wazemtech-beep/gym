@@ -8,6 +8,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Shared coordination across serverless instances; contains no account secrets.
+model RuntimeState {
+  key       String   @id
+  value     String
+  expiresAt DateTime?
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 enum Role {
   OWNER
   RECEPTIONIST

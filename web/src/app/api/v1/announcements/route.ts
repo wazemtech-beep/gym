@@ -5,10 +5,8 @@ import { prisma } from "@/lib/db";
 import {
   AnnouncementAudience,
   AnnouncementPriority,
-  NotificationCategory,
   Role,
 } from "@prisma/client";
-import { dispatchNotification } from "@/lib/notifications";
 
 async function getHandler(req: NextRequest) {
   try {
@@ -126,79 +124,13 @@ async function postHandler(req: NextRequest) {
       },
     });
 
-    // 2. If published immediately (effectivePublishAt <= now) and not draft, broadcast to target audience
-    let recipientCount = 0;
-    let emailSentCount = 0;
-    let pushSentCount = 0;
-
-    if (isPublished && effectivePublishAt <= new Date()) {
-      // Find recipients based on audience
-      let targetUserIds: string[] = [];
-
-      if (audience === "ALL_MEMBERS") {
-        const members = await prisma.gymMember.findMany({
-          where: { userId: { not: null } },
-          select: { userId: true },
-        });
-        targetUserIds = members.map((m) => m.userId!).filter(Boolean);
-      } else if (audience === "ACTIVE_MEMBERS") {
-        const activeMemberships = await prisma.membership.findMany({
-          where: { status: "ACTIVE" },
-          include: { gymMember: { select: { userId: true } } },
-        });
-        targetUserIds = activeMemberships.map((m) => m.gymMember.userId!).filter(Boolean);
-      } else if (audience === "STAFF") {
-        const staff = await prisma.user.findMany({
-          where: { role: { in: [Role.OWNER, Role.RECEPTIONIST, Role.TRAINER] } },
-          select: { id: true },
-        });
-        targetUserIds = staff.map((s) => s.id);
-      } else if (audience === "SELECTED_MEMBERS") {
-        targetUserIds = targetMemberIds;
-      }
-
-      recipientCount = targetUserIds.length;
-
-      // Dispatch notifications across specified channels
-      for (const userId of targetUserIds) {
-        const res = await dispatchNotification({
-          recipientUserId: userId,
-          eventType: "ANNOUNCEMENT_PUBLISHED",
-          title: title.trim(),
-          message: content.trim(),
-          category: NotificationCategory.ANNOUNCEMENT,
-          entityType: "ANNOUNCEMENT",
-          entityId: announcement.id,
-          actionUrl: "/dashboard",
-          channels: channels as Array<"IN_APP" | "EMAIL" | "PUSH">,
-          announcementId: announcement.id,
-          dedupKey: `announcement-${announcement.id}-${userId}`,
-        });
-
-        if (res.emailStatus === "ACCEPTED") emailSentCount++;
-        if (res.pushStatus === "ACCEPTED") pushSentCount++;
-      }
-
-      // Update announcement with delivery stats
-      await prisma.announcement.update({
-        where: { id: announcement.id },
-        data: {
-          recipientCount,
-          emailSentCount,
-          pushSentCount,
-        },
-      });
-    }
+    // Publishing is immediate; audience delivery is durably picked up by cron.
+    // Never send an unbounded broadcast inside a serverless HTTP request.
 
     return NextResponse.json({
       success: true,
-      message: isPublished ? "Announcement publish aur broadcast ho gayi." : "Announcement draft save ho gayi.",
-      data: {
-        ...announcement,
-        recipientCount,
-        emailSentCount,
-        pushSentCount,
-      },
+      message: isPublished ? "Announcement publish ho gayi. Notifications delivery pending hai." : "Announcement draft save ho gayi.",
+      data: announcement,
     });
   } catch (error: any) {
     console.error("CREATE_ANNOUNCEMENT_ERROR:", error);

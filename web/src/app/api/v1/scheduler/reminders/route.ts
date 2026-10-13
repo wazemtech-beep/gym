@@ -1,46 +1,40 @@
-import { withReadCache } from "@/lib/serverReadCache";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/session";
-import { Role } from "@prisma/client";
-import { applyMembershipLifecycle } from "@/lib/membershipLifecycle";
-import {
-  runReminderScheduler,
-  runScheduledAnnouncementWorker,
-  processNotificationOutbox,
-} from "@/lib/notifications";
+import { timingSafeEqual } from "node:crypto";
+import { runScheduledWork } from "@/lib/scheduledWork";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+function validCron(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  const expected = Buffer.from(`Bearer ${secret || ""}`);
+  const actual = Buffer.from(req.headers.get("authorization") || "");
+  return !!secret && actual.length === expected.length && timingSafeEqual(actual, expected);
+}
 
 async function postHandler(req: NextRequest) {
   try {
-    const current = await getCurrentSession();
-    // Allow cron with secret or authenticated owner
-    const authHeader = req.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-
-    const isCron = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`;
-    const isOwner = current?.user?.role === Role.OWNER;
-
+    const isCron = validCron(req);
+    // GET mutates scheduled state and requires the cron secret, never a cookie.
+    const current = !isCron && req.method === "POST" ? await getCurrentSession() : null;
+    const isOwner = current?.user.role === "OWNER" && !current.user.mustChangePassword;
     if (!isCron && !isOwner) {
       return NextResponse.json({ success: false, error: "Unauthorized access to scheduler." }, { status: 403 });
     }
 
-    await applyMembershipLifecycle();
-    const remindersResult = await runReminderScheduler();
-    const announcementsResult = await runScheduledAnnouncementWorker();
-    const outboxResult = await processNotificationOutbox();
+    const result = await runScheduledWork();
 
     return NextResponse.json({
-      success: remindersResult.success && announcementsResult.success && outboxResult.success,
-      message: "System background processing scan mukammal ho gaya.",
-      data: {
-        reminders: remindersResult.results,
-        announcements: announcementsResult.results,
-        outbox: outboxResult.results,
-      },
-    });
-  } catch (error: any) {
-    console.error("SCHEDULER_ROUTE_ERROR:", error);
+      ...result,
+      message: result.skipped ? "A scheduled run is already active." : "System background processing batch mukammal ho gaya.",
+    }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    console.error("SCHEDULER_ROUTE_ERROR:", error instanceof Error ? error.message : "Unknown failure");
     return NextResponse.json({ success: false, error: "Scheduler chalane mein masla aya." }, { status: 500 });
   }
 }
 
-export const POST = withReadCache(postHandler);
+export const GET = postHandler;
+export const POST = postHandler;

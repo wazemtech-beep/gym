@@ -1,9 +1,10 @@
 # OXGEN GYM
 
-Gym management platform with an admin/staff/trainer web portal, a member web portal, an existing shared backend and an Expo React Native member app.
+Gym management platform with an admin/staff/trainer web portal, a member web portal, a shared backend and one Expo React Native app with member, trainer, owner and receptionist roles.
 
 - `web/`: Next.js 16, React 19, Prisma 6/PostgreSQL; web UI, API routes and notification worker.
-- `mobile/`: Expo SDK 57, React Native 0.86, Expo Router; Android/iOS member app. Native Health Connect integration targets Android.
+- `mobile/`: Expo SDK 57, React Native 0.86, Expo Router; Android/iOS app with role-based screens. Native Health Connect integration targets Android.
+- `DEPLOYMENT.md`: Vercel deployment settings, environment preparation, cron behavior and verification commands.
 - `requirement.txt`: original functional requirements.
 - `feature-completion-status.md`: chronological implementation and verification notes. Later dated entries supersede earlier unverified notes.
 - `CODEX_HANDOFF.md`: current project context, commands, verification results and remaining work for another coding session.

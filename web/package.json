@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "npm run deploy:prepare && next build",
+    "deploy:prepare": "node scripts/check-deployment-env.cjs && prisma generate && prisma db execute --file prisma/serverless-runtime.sql --schema prisma/schema.prisma",
+    "deploy:env": "node scripts/prepare-vercel-env.cjs",
+    "verify:serverless": "tsx scripts/verify-serverless.ts",
     "start": "next start",
     "worker": "tsx scripts/background-worker.ts",
     "lint": "eslint",

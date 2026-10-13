@@ -11,9 +11,11 @@ function databaseUrl() {
   if (["postgres:", "postgresql:"].includes(url.protocol)) {
     // Aiven hobby/free PostgreSQL allows max 20 connections across the entire DB.
     // Cap connection_limit to 3 per process to prevent connection pool exhaustion.
-    const currentLimit = Number(url.searchParams.get("connection_limit") || 3);
-    url.searchParams.set("connection_limit", String(Math.min(currentLimit, 3)));
+    const cap = process.env.VERCEL ? 1 : 3;
+    const currentLimit = Number(url.searchParams.get("connection_limit") || cap);
+    url.searchParams.set("connection_limit", String(Number.isFinite(currentLimit) && currentLimit >= 1 ? Math.min(currentLimit, cap) : cap));
     if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "20");
+    if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "10");
   }
   return url.toString();
 }

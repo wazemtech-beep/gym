@@ -118,8 +118,14 @@ async function main() {
       await new Promise<void>(resolve => probe.close(() => resolve()));
       const secret = randomUUID() + randomUUID();
       server = spawn(process.execPath, [loadModule.resolve('next/dist/bin/next'), 'start', '-p', String(port)], { cwd: process.cwd(), env: { ...process.env, CRON_SECRET: secret }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      // Do not print environment or credential-bearing server logs.
-      server.stdout?.resume(); server.stderr?.resume();
+      // Observe only this fixed scheduler marker; never print server logs/credentials.
+      let backgroundSkipped = false;
+      let schedulerOutput = '';
+      server.stdout?.on('data', chunk => {
+        schedulerOutput = (schedulerOutput + chunk.toString()).slice(-4096);
+        backgroundSkipped ||= schedulerOutput.includes('SCHEDULER_BATCH_COMPLETE: {"success":true,"skipped":true');
+      });
+      server.stderr?.resume();
       const base = `http://127.0.0.1:${port}`;
       for (let i = 0; i < 50; i++) {
         try { await fetch(base + '/api/auth/me', { signal: AbortSignal.timeout(2000) }); break; } catch { await new Promise(resolve => setTimeout(resolve, 200)); }
@@ -130,8 +136,11 @@ async function main() {
       check('cron GET rejects wrong secret', wrong.status === 403);
       globalLease = await acquireJobLease('scheduler:lease');
       if (!globalLease) throw new Error('Cannot isolate HTTP cron test while scheduler is active');
-      const correct = await fetch(base + '/api/v1/scheduler/reminders', { headers: { Authorization: 'Bearer ' + secret } });
-      check('Vercel GET secret accepted and overlapping work safely skipped', correct.ok && (await correct.json()).skipped === true);
+      const triggerStart = Date.now();
+      const correct = await fetch(base + '/api/v1/scheduler/reminders', { headers: { Authorization: 'Bearer ' + secret }, signal: AbortSignal.timeout(5000) });
+      check('external cron GET quickly acknowledges authorized trigger without claiming completion', correct.status === 202 && (await correct.json()).accepted === true && Date.now() - triggerStart < 5000 && correct.headers.get('cache-control') === 'private, no-store');
+      for (let i = 0; i < 75 && !backgroundSkipped; i++) await new Promise(resolve => setTimeout(resolve, 200));
+      check('post-response background callback runs and safely skips overlapping work', backgroundSkipped);
       const token = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
       await prisma.session.create({ data: { userId: users[0], token, expiresAt: new Date(Date.now() + 60000) } });
       const sync = await fetch(base + '/api/v1/cache-sync', { headers: { Authorization: 'Bearer ' + token } });
@@ -151,7 +160,7 @@ async function main() {
       check('notify-update HTTP queues one event per existing recipient', updateResponse.ok && updatedEvents === 3);
     }
     const config = JSON.parse(fs.readFileSync(path.resolve('vercel.json'), 'utf8'));
-    check('Vercel cron targets authenticated GET route every minute', config.crons[0].path === '/api/v1/scheduler/reminders' && config.crons[0].schedule === '* * * * *');
+    check('external scheduler configuration contains no Vercel cron plan restriction', !config.crons?.length);
     console.log(JSON.stringify({ check: 'serverless-deployment', passed, failed: 0, emailsSent: 0 }));
   } finally {
     server?.kill();

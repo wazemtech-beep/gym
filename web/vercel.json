@@ -2,8 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "npm run build:vercel",
-  "installCommand": "npm ci",
-  "crons": [
-    { "path": "/api/v1/scheduler/reminders", "schedule": "* * * * *" }
-  ]
+  "installCommand": "npm ci"
 }

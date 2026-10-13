@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/session";
 import { timingSafeEqual } from "node:crypto";
 import { runScheduledWork } from "@/lib/scheduledWork";
@@ -22,6 +22,24 @@ async function postHandler(req: NextRequest) {
     const isOwner = current?.user.role === "OWNER" && !current.user.mustChangePassword;
     if (!isCron && !isOwner) {
       return NextResponse.json({ success: false, error: "Unauthorized access to scheduler." }, { status: 403 });
+    }
+
+    if (req.method === "GET") {
+      // cron-job.org disconnects after 30s. Next/Vercel keeps this callback alive
+      // after acknowledging the trigger, up to the route's maxDuration.
+      after(async () => {
+        try {
+          const result = await runScheduledWork();
+          console.info("SCHEDULER_BATCH_COMPLETE:", JSON.stringify(result));
+        } catch (error) {
+          console.error("SCHEDULER_BACKGROUND_ERROR:", error instanceof Error ? error.message : "Unknown failure");
+        }
+      });
+      return NextResponse.json({
+        success: true,
+        accepted: true,
+        message: "Scheduler trigger accepted. Check Settings Health and function logs for completion.",
+      }, { status: 202, headers: { "Cache-Control": "private, no-store" } });
     }
 
     const result = await runScheduledWork();

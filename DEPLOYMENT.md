@@ -26,7 +26,7 @@ Import the GitHub repository and configure:
 - Output Directory: Next.js default
 - Node.js: 24.x (matches the verified local runtime)
 - Fluid compute enabled
-- Vercel Pro for the configured every-minute cron
+- Scheduling: external cron-job.org (no built-in Vercel cron configured)
 
 Use your actual production HTTPS domain in the next command. Keep the project/domain stable so email links and the mobile API point to the same origin.
 
@@ -43,7 +43,7 @@ The local main `.env` can also hold the credential directly. `npm run deploy:env
 
 Add those variables in Vercel Project Settings → Environment Variables, scoped to Production, before deploying. Use the `.env` import/paste option if available, or add the values individually. Preserve the JSON value and its `\n` escapes; do not include the surrounding single quotes when entering it individually. Never prefix the Admin credential with `NEXT_PUBLIC_`. Public Firebase web configuration variables are separate.
 
-For Preview deployments, use the appropriate preview environment and database. Preview builds also need database, auth and Firebase JSON configuration, but Vercel only schedules the cron on production. The existing Aiven database must remain reachable and have a connection allowance suitable for your function concurrency; use the provider's pooled URL if available. The app caps each Vercel instance to one Prisma connection, but this is not a global connection cap.
+For Preview deployments, use the appropriate preview environment and database. Preview builds also need database, auth and Firebase JSON configuration. Configure the external scheduler only for the stable production domain. The existing Aiven database must remain reachable and have a connection allowance suitable for your function concurrency; use the provider's pooled URL if available. The app caps each Vercel instance to one Prisma connection, but this is not a global connection cap.
 
 ## Deploy
 
@@ -62,7 +62,20 @@ Select the configured project. Do not create a second project for this same depl
 
 ## Scheduled processing and cache behavior
 
-`web/vercel.json` calls `GET /api/v1/scheduler/reminders` every minute. Vercel automatically attaches `Authorization: Bearer <CRON_SECRET>`. GET requires the secret; authenticated owners can still trigger POST. The route is dynamic, uncached and has a 300-second execution limit. It stops starting new work within its 200-second budget and limits recipient/outbox batches. PostgreSQL leases prevent overlapping cron runs and concurrent delivery of the same event; abandoned leases expire. HTTP/provider retries remain at-least-once: an interruption after provider acceptance but before persistence can still require reconciliation.
+`web/vercel.json` has no `crons` entry, so the every-minute Vercel Hobby cron deployment restriction does not apply. Create one job at https://console.cron-job.org after deploying:
+
+- Title: OXGEN scheduled processing
+- URL: `https://oxgengen.vercel.app/api/v1/scheduler/reminders`
+- Schedule: every minute; timezone Asia/Karachi (an interval runs identically in any timezone)
+- Request method: GET
+- Advanced settings → Headers: name `Authorization`, value `Bearer YOUR_CRON_SECRET`
+- Replace `YOUR_CRON_SECRET` with the exact Production `CRON_SECRET` imported into Vercel from local `web/.env.vercel`. Keep the space after `Bearer`; do not include quotes or put the secret in the URL.
+- Locally, ignored `web/.env.cron-job` contains ready-to-copy URL, method, schedule, header name and header value using that same import-file secret. This setup file is not a runtime environment file; never commit it. If you rotate `CRON_SECRET`, update Vercel and the external job together.
+- Enable the job and failure/recovery notifications; use Test run to check HTTP **202** with `accepted: true`. A **403** means the Authorization header/secret does not match. A hosting login/challenge response means deployment protection is blocking the external service, before our endpoint is reached.
+
+The free cron-job.org request timeout is 30 seconds. Authenticated GET responds immediately with **202 Accepted**, then Next.js `after` keeps the bounded batch running on Vercel after the response. Acceptance confirms the trigger, not successful processing. Check Settings → Health for an advancing scheduler heartbeat and Vercel function logs for `SCHEDULER_BATCH_COMPLETE` or `SCHEDULER_BACKGROUND_ERROR`. Enable Fluid compute so the route's 300-second function limit is available. The runner stops starting new work within its 200-second budget and limits recipient/outbox batches. PostgreSQL leases prevent overlapping runs and concurrent delivery of the same event; abandoned leases expire. An interrupted invocation leaves unfinished durable queue/cursor work for a later trigger. HTTP/provider retries remain at-least-once: an interruption after provider acceptance but before persistence can still require reconciliation. Authenticated owners retain the synchronous POST trigger and its completion result.
+
+External scheduling does not remove Vercel function/database usage limits or change Vercel plan eligibility; monitor usage. The external account/job is not created by deploying the code. Until that job is enabled, scheduled work needs a manual owner trigger or the optional local worker.
 
 Membership/reminder scans persist a member cursor. Announcement recipients are queued in pages and deduplicated. Queued work survives function restarts and continues on later invocations. Newly published announcements are visible immediately; email/push/in-app notification fan-out is processed asynchronously. Large queues can take several cron runs.
 
@@ -73,7 +86,7 @@ Do not run `npm run worker` as a Vercel function. It remains an optional local/V
 ## After deployment
 
 1. Open `/admin/login` and `/login`; verify existing accounts and permissions.
-2. Check Settings → Health and Vercel cron logs. A successful run updates the scheduler heartbeat; token authorization, skipped overlaps and failures must appear accurately.
+2. Configure the cron-job.org job above. Check its test/history, Settings → Health and Vercel function logs. A successful batch updates the scheduler heartbeat; HTTP acceptance alone is not delivery confirmation.
 3. With a synthetic account, confirm writes refresh another session, reminders process, and notification queue entries complete. Do not test broadcasts on real members.
 4. Verify reset/activation links use the deployed HTTPS domain, SMTP delivery works and private Cloudinary files retain access checks.
 5. Set mobile `EXPO_PUBLIC_API_URL` to this HTTPS origin in the appropriate EAS environment and rebuild the standalone APK. Supply Android Firebase config using the EAS file variable supported by `app.config.js`. Then finish the standalone cold-start notification and PDF-sharing tests.
@@ -89,4 +102,4 @@ npm run verify:serverless -- --http
 
 The verification suite creates scoped synthetic users/announcements, sends no external notifications, tests shared-cache invalidation and job leases, starts a temporary local production server for HTTP authentication checks, then cleans its fixtures. It never invokes an unscoped cron run against your gym data.
 
-References: [Vercel cron authentication](https://vercel.com/docs/cron-jobs/manage-cron-jobs), [cron plan limits](https://vercel.com/docs/cron-jobs/usage-and-pricing), [environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables).
+References: [cron-job.org timeout and custom headers](https://cron-job.org/en/faq/), [Next.js post-response processing](https://nextjs.org/docs/app/api-reference/functions/after), [Vercel function limits](https://vercel.com/docs/functions/limitations), [environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables).

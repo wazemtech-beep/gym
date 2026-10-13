@@ -30,12 +30,16 @@ Import the GitHub repository and configure:
 
 Use your actual production HTTPS domain in the next command. Keep the project/domain stable so email links and the mobile API point to the same origin.
 
+The current production origin supplied for this project is `https://oxgengen.vercel.app`. A ready local import file is `web/.env.vercel`; it contains all 24 configured production variables and inline Firebase Admin JSON. This file remains ignored. Local development `.env` now also contains the Admin JSON directly; its localhost URL remains the development setting.
+
 ```powershell
 Set-Location "D:\SAAS APPS PENDING\gym\web"
 npm run deploy:env -- --url https://YOUR-SITE.vercel.app
 ```
 
 This creates ignored `web/.env.vercel` from your existing local configuration. It preserves the existing session secret, converts the local Firebase Admin service-account file to the server-only `FIREBASE_SERVICE_ACCOUNT_JSON` variable, sets HTTPS app URLs, and creates `CRON_SECRET` if missing. Nothing is printed or sent to another service by this command.
+
+The local main `.env` can also hold the credential directly. `npm run deploy:env -- --inline-firebase` replaces the local file-path variable with one-line Admin JSON and preserves the existing app/session settings. If the final domain is not known yet, `npm run deploy:env -- --template` creates the import file with URL placeholders. Replace `APP_URL`, `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL` with the real HTTPS origin before deploying; the cloud build rejects the `.invalid` placeholder.
 
 Add those variables in Vercel Project Settings → Environment Variables, scoped to Production, before deploying. Use the `.env` import/paste option if available, or add the values individually. Preserve the JSON value and its `\n` escapes; do not include the surrounding single quotes when entering it individually. Never prefix the Admin credential with `NEXT_PUBLIC_`. Public Firebase web configuration variables are separate.
 

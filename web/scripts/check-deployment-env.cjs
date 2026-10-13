@@ -6,7 +6,7 @@ if (process.env.VERCEL) {
   if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
   if (!secret || secret.length < 32) missing.push('existing auth/session secret (32+ characters)');
   const address = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
-  try { if (!address || new URL(address).protocol !== 'https:') missing.push('HTTPS APP_URL'); } catch { missing.push('valid APP_URL'); }
+  try { if (!address || new URL(address).protocol !== 'https:' || new URL(address).hostname.endsWith('.invalid')) missing.push('actual HTTPS APP_URL (replace the template URL)'); } catch { missing.push('valid APP_URL'); }
   if (process.env.VERCEL_ENV === 'production' && (!process.env.CRON_SECRET || process.env.CRON_SECRET.length < 16)) missing.push('CRON_SECRET (16+ characters)');
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) missing.push('FIREBASE_SERVICE_ACCOUNT_JSON');
   else {

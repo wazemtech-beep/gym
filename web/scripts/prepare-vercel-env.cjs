@@ -42,13 +42,34 @@ function buildDeploymentEnv(env, address, readCredential = file => fs.readFileSy
 
 function main() {
   loadEnvConfig(process.cwd());
+  if (process.argv.includes('--inline-firebase')) {
+    let account;
+    try { account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || fs.readFileSync(path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || ''), 'utf8')); }
+    catch { throw new Error('Firebase Admin credential JSON is invalid or missing'); }
+    if (!account.project_id || !account.client_email || !account.private_key) throw new Error('Incomplete Firebase Admin credential');
+    const json = JSON.stringify(account);
+    if (json.includes("'")) throw new Error('Unsupported quote in Firebase configuration');
+    const file = path.resolve('.env');
+    let text = fs.readFileSync(file, 'utf8');
+    text = text.replace(/^\s*FIREBASE_SERVICE_ACCOUNT_PATH\s*=.*(?:\r?\n|$)/gm, '');
+    text = text.replace(/^\s*FIREBASE_SERVICE_ACCOUNT_JSON\s*=.*(?:\r?\n|$)/gm, '');
+    text = text.trimEnd() + "\nFIREBASE_SERVICE_ACCOUNT_JSON='" + json + "'\n";
+    if (!/^\s*CRON_SECRET\s*=/m.test(text)) text += 'CRON_SECRET="' + (process.env.CRON_SECRET || crypto.randomBytes(32).toString('hex')) + '"\n';
+    fs.writeFileSync(file + '.tmp', text, { mode: 0o600 });
+    fs.renameSync(file + '.tmp', file);
+    console.log('Updated local .env with direct Firebase Admin JSON and cron secret. Private values are not printed.');
+    return;
+  }
   const index = process.argv.indexOf('--url');
-  if (index < 0 || !process.argv[index + 1]) throw new Error('Usage: npm run deploy:env -- --url https://YOUR-SITE.vercel.app');
-  const result = buildDeploymentEnv(process.env, process.argv[index + 1]);
+  const template = process.argv.includes('--template');
+  const address = index >= 0 ? process.argv[index + 1] : template ? 'https://replace-with-your-vercel-domain.invalid' : undefined;
+  if (!address) throw new Error('Usage: npm run deploy:env -- --url https://YOUR-SITE.vercel.app (or --template)');
+  const result = buildDeploymentEnv(process.env, address);
   if (process.argv.includes('--check')) { console.log('Deployment environment validated; no file written'); return; }
   const file = path.resolve('.env.vercel');
   fs.writeFileSync(file, result.content, { mode: 0o600 });
   console.log('Created ignored .env.vercel for Vercel environment import. Credentials are not printed.');
+  if (template) console.log('Replace APP_URL, NEXT_PUBLIC_APP_URL and BETTER_AUTH_URL with the actual production HTTPS origin before deploying.');
 }
 module.exports = { buildDeploymentEnv };
 if (require.main === module) {

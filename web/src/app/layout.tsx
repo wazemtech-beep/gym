@@ -4,6 +4,7 @@ import "./globals.css";
 import ReadCacheBridge from "@/components/common/ReadCacheBridge";
 import { getCurrentSession } from "@/lib/session";
 import { readCacheScope } from "@/lib/serverReadCache";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const barlow = localFont({
   src: [
@@ -34,7 +35,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const current = await getCurrentSession();
   return (
     <html lang="en" className={`${barlow.variable} ${barlowCondensed.variable}`}>
-      <body><ReadCacheBridge scope={current ? readCacheScope(current) : ""}>{children}</ReadCacheBridge></body>
+      <body>
+        <ReadCacheBridge scope={current ? readCacheScope(current) : ""}>{children}</ReadCacheBridge>
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
